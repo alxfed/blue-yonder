@@ -2,7 +2,7 @@
 requires = ["setuptools>=67.0"]
 build-backend = "setuptools.build_meta"
 [project]
-name = "package-name"
+name = "blue-yonder"
 version = "0.0.1"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
@@ -16,5 +16,5 @@ classifiers=[
         "Operating System :: OS Independent",
 ]
 [project.urls]
-"Homepage" = "https://github.com/org_name/package_name"
-"Bug Tracker" = "https://github.com/org_name/package_name/issues"
+"Homepage" = "https://github.com/alxfed/blue-yonder"
+"Bug Tracker" = "https://github.com/alxfed/blue-yonder/issues"

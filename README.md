@@ -1,10 +1,10 @@
-# Package name
-Package Name
+# Blue Yonder
+A Python API for Bluesky for humans.
 <pre>
-  pip install independent-machine
+  pip install blue-yonder
 </pre>
 Then:
 ```Python
   # Python
-  import independent_machine
+  import blue_yonder
 ```
