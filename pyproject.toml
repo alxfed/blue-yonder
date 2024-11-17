@@ -7,13 +7,18 @@ version = "0.0.1"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
 ]
-description = "Package description"
+description = "Bluesky Python API for humans."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+]
+keywords = ["bluesky", "bsky", "blue-yonder"]
+dependencies = [
+    "requests >= 2.32.3",
+    "atproto >= 0.0.55"
 ]
 [project.urls]
 "Homepage" = "https://github.com/alxfed/blue-yonder"
