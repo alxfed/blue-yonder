@@ -3,7 +3,7 @@ requires = ["setuptools>=67.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "blue-yonder"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
 ]
@@ -17,8 +17,7 @@ classifiers=[
 ]
 keywords = ["bluesky", "bsky", "blue-yonder"]
 dependencies = [
-    "requests >= 2.32.3",
-    "atproto >= 0.0.55"
+    "requests >= 2.32.3"
 ]
 [project.urls]
 "Homepage" = "https://github.com/alxfed/blue-yonder"

@@ -20,6 +20,7 @@ class Client(object):
     accessJwt   = None
     refreshJwt  = None
     handle      = None
+    jwt         = None
 
     def __init__(self, bluesky_handle: str, bluesky_password: str, **kwargs):
         """
@@ -55,6 +56,7 @@ class Client(object):
                 try:
                     res = response.json()
                     # Get the handle and access / refresh JWT
+                    self.jwt            = res
                     self.handle         = res['handle']
                     self.accessJwt      = res['accessJwt']
                     self.refreshJwt     = res['refreshJwt']  # Don't know how to use it yet.
@@ -68,8 +70,8 @@ class Client(object):
             except Exception as e:
                 print(e)
 
-    def jwt(self):
-        return self.accessJwt
+    def publish_jwt(self):
+        return self.jwt
 
     def post(self, text: str = None, many: list = None, **kwargs):
         """
