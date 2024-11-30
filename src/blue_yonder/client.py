@@ -6,8 +6,14 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime, timezone
-from os import getenv
+from os import environ
 import requests
+
+
+handle      = environ.get('BLUESKY_HANDLE')      # the handle of a poster, linker, liker
+password    = environ.get('BLUESKY_PASSWORD')    # the password of this poster
+actor       = environ.get('BLUESKY_ACTOR')       # the actor whose posts will be used in tests
+pds_url     = environ.get('PDS_URL', 'https://bsky.social')  # the URL of a Private Data Server
 
 
 class Client(object):
@@ -22,30 +28,35 @@ class Client(object):
     handle      = None
     jwt         = None
 
-    def __init__(self, bluesky_handle: str, bluesky_password: str, **kwargs):
+    #recent
+    last_uri    = None
+    last_cid    = None
+    last_rev    = None
+
+    def __init__(self, **kwargs):
         """
             Launch the Butterfly!
-
-        :param bluesky_handle:
-        :param bluesky_password:
-        :param kwargs:
         """
-
+        self.handle     = kwargs.get('bluesky_handle',      handle)
+        self.password   = kwargs.get('bluesky_password',    password)
+        self.actor      = kwargs.get('bluesky_actor',       actor)
         # if you have a Private Data Server specify it as a pds_url kw argument
-        self.pds_url = kwargs.get('pds_url', 'https://bsky.social')
+        self.pds_url    = kwargs.get('pds_url',             pds_url)
+        self.post_url   = None
+        # If given an old session web-token - use _it_.
+        self.jwt        = kwargs.get('jwt', None)
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
+        self.post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
 
-        # chech whether we were given an old session
-        self.accessJwt = kwargs.get('accessJwt', None)
-        if self.accessJwt:
-            # Yes, we were, so install the cookie into the Session.
-            self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
+        if self.jwt:
+            # We were given a web-token, install the cookie into the Session.
+            self.session.headers.update({'Authorization': 'Bearer ' + self.jwt['accessJwt']})
         else:
             # No, we were not, let's create a new session.
             session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
-            session_data = {'identifier': bluesky_handle, 'password': bluesky_password}
+            session_data = {'identifier': self.handle, 'password': self.password}
 
             # Request a permission to fly in the wild blue yonder.
             try:
@@ -54,112 +65,99 @@ class Client(object):
                     json=session_data)
                 response.raise_for_status()
                 try:
-                    res = response.json()
-                    # Get the handle and access / refresh JWT
-                    self.jwt            = res
-                    self.handle         = res['handle']
-                    self.accessJwt      = res['accessJwt']
-                    self.refreshJwt     = res['refreshJwt']  # Don't know how to use it yet.
-                    self.did            = res['did']
-                    # Adjust the Session.
-                    self.post_url       = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
-                    # Install the cookie in the Session.
+                   # Get the handle and access / refresh JWT
+                    self.jwt            = response.json()
+                    self.handle         = self.jwt['handle']
+                    self.accessJwt      = self.jwt['accessJwt']
+                    self.refreshJwt     = self.jwt['refreshJwt']  # Don't know how to use it yet.
+                    self.did            = self.jwt['did']
+
+                    # Adjust the Session. Install the cookie into the Session.
                     self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
                 except Exception as e:
-                    raise RuntimeError(f'Error, with talking to Huston:  {e}')
+                    raise RuntimeError(f'Huston does not approve:  {e}')
             except Exception as e:
-                print(e)
+                RuntimeError(f'Huston does not respond:  {e}')
 
     def publish_jwt(self):
         return self.jwt
 
-    def post(self, text: str = None, many: list = None, **kwargs):
+    def post(self, text: str = None, **kwargs):
         """
             Post.
         :param text:
         :return:
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-        if not many and text:
-            post_data = {
-                "repo": self.did, # self.handle,
-                "collection": "app.bsky.feed.post",
-                "record":
-                    {
-                        "$type": "app.bsky.feed.post",
-                        "text": text,
-                        "createdAt": now
-                    }
-            }
-        elif many:
-            post_data = {}
-            for post in many:
-                chunk =self.post_a_post(post)
-        else:
-            raise Exception("You need to specify either text or grain.")
-
-        post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
+        # Prepare to post
+        post_data = {
+            'repo':         self.did,   # self.handle,
+            'collection':   'app.bsky.feed.post',
+            'record':
+                {
+                    '$type': 'app.bsky.feed.post',
+                    'text': text,
+                    'createdAt': now
+                }
+        }
 
         try:
-            response = self.session.post(
-                url=post_url,
-                json=post_data)
-
+            response = self.session.post(url=self.post_url, json=post_data)
             response.raise_for_status()
             res = response.json()
-
-            # Get the handle and access / refresh JWT
             self.last_uri = res['uri']
             self.last_cid = res['cid']
             self.last_rev = res['commit']['rev']
 
         except Exception as e:
             raise Exception(f"Error, with talking to Huston:  {e}")
-        return response.json()
+        return res
 
-    def thread(self, posts_text: list):
+    def thread(self, posts_texts: list):
         """
             A trill of posts.
-
-        :param posts:
-        :return:
         """
-        last_uri = None
-        last_cid = None
-        last_rev = None
+        first_uri = None
+        first_cid = None
+        first_rev = None
 
-        post_text = posts_text.pop(0)
-
+        post_text = posts_texts.pop(0)
         self.post(text=post_text)
+        first_uri = self.last_uri
+        first_cid = self.last_cid
+        first_rev = self.last_rev
+
+        for post_text in posts_texts:
+            self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
 
     def reply(self, root_post: dict, post: dict, text: str):
         """
-            post back.
-
-        :param root_post:
-        :param post:
-        :param text:
-        :return:
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         reply_data = {
-            "repo": self.did,  # self.handle,
-            "collection": "app.bsky.feed.post",
-            "record":
-                {
-                    "$type": "app.bsky.feed.post",
-                    "text": text,
-                    "createdAt": now
+            'repo':         self.did,   # self.handle,
+            'collection':   'app.bsky.feed.post',
+            'record': {
+                '$type': 'app.bsky.feed.post',
+                'text': text,
+                'createdAt': now,
+                'reply': {
+                    'root': {
+                        'uri': root_post['uri'],
+                        'cid': root_post['cid']
+                    },
+                    'parent': {
+                        'uri': post['uri'],
+                        'cid': post['cid']
+                    }
                 }
+            }
         }
-
-        post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
 
         try:
             response = self.session.post(
-                url=post_url,
+                url=self.post_url,
                 json=reply_data)
 
             response.raise_for_status()
@@ -172,41 +170,35 @@ class Client(object):
 
         except Exception as e:
             raise Exception(f"Error, with talking to Huston:  {e}")
-        return response.json()
 
-    def quote_post(self, text: str):
+        return res
+
+    def quote_post(self, embed_post: dict, text: str):
         """
-            post back.
-
-        :param root_post:
-        :param text:
-        :return:
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         quote_data = {
-            "repo": self.did,  # self.handle,
-            "collection": "app.bsky.feed.post",
-            "record":
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.post',
+            'record':
                 {
-                    "$type": "app.bsky.feed.post",
-                    "text": text,
-                    "createdAt": now,
-                    "embed": {
-                        "$type": "app.bsky.embed.record",
-                        "record": {
-                            "uri": 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.post/3lbadvvi4ja2z',
-                            "cid": 'bafyreidmtjniejo3jdpxl5wmen2yhwcbheu5jwdauhl2ocueglpokz5pdm'
+                    '$type': 'app.bsky.feed.post',
+                    'text': text,
+                    'createdAt': now,
+                    'embed': {
+                        '$type': 'app.bsky.embed.record',
+                        'record': {
+                            'uri': embed_post['uri'],
+                            'cid': embed_post['cid']
                         }
                     }
                 }
         }
 
-        post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
-
         try:
             response = self.session.post(
-                url=post_url,
+                url=self.post_url,
                 json=quote_data)
 
             response.raise_for_status()
@@ -219,17 +211,17 @@ class Client(object):
 
         except Exception as e:
             raise Exception(f"Error, with talking to Huston:  {e}")
-        return response.json()
+
+        return res
 
 
 if __name__ == "__main__":
-    # kwargs = {
-    #     'pds_url': 'https://bsky.social'
-    # }
-    butterfly = Client(
-        bluesky_handle=getenv('BLUESKY_HANDLE'),
-        bluesky_password=getenv('BLUESKY_PASSWORD')
-    )
+    """
+    Quick test.
+    """
+    butterfly = Client()
     result = butterfly.post(text='This is a flap of the butterfly wings that caused the hurricane.')
-    other_result = butterfly.quote_post(text='This is a post with an embedded post.')
+    quote = {'uri': result['uri'], 'cid': result['cid']}
+    result = butterfly.reply(root_post=quote, post=quote, text='This is a reply to a post.')
+    other_result = butterfly.quote_post(embed_post=quote, text='This is a post with an embedded post.')
     ...

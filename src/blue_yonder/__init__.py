@@ -7,9 +7,11 @@ LICENSE file in the root directory of this source tree.
 """
 from .client import Client
 
-Butterfly = Client  # playful alias
+Butterfly = Client  # playful
+Bird = Client       # aliases
 
 __all__ = [
     'Client',
-    'Butterfly'
+    'Butterfly',
+    'Bird'
 ]
