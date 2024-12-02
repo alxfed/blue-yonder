@@ -55,7 +55,8 @@ class Client(object):
 
         if self.jwt:
             # We were given a web-token, install the cookie into the Session.
-            self.session.headers.update({'Authorization': 'Bearer ' + self.jwt['accessJwt']})
+            self.accessJwt = self.jwt['accessJwt']
+            self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
         else:
             # No, we were not, let's create a new session.
             session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
