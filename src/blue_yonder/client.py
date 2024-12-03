@@ -8,12 +8,12 @@ LICENSE file in the root directory of this source tree.
 from datetime import datetime, timezone
 from os import environ
 import requests
-from json import dumps
+from json import dumps, loads
 
 
 handle      = environ.get('BLUESKY_HANDLE')      # the handle of a poster, linker, liker
 password    = environ.get('BLUESKY_PASSWORD')    # the password of this poster
-actor       = environ.get('BLUESKY_ACTOR')       # the actor whose posts will be used in tests
+actor       = environ.get('BLUESKY_ACTOR')       # the actor whose feeds will be used in tests
 pds_url     = environ.get('PDS_URL', 'https://bsky.social')  # the URL of a Private Data Server
 
 
@@ -36,6 +36,9 @@ class Client(object):
     last_rev    = None
     last_blob   = None
 
+    # default actor for testing
+    actor   = 'did:plc:x7lte36djjyhereki5avyst7'
+
     def __init__(self, **kwargs):
         """
             Launch the Butterfly!
@@ -52,39 +55,47 @@ class Client(object):
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
-        self.post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
+        # self.post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
 
         if self.jwt:
             # We were given a web-token, install the cookie into the Session.
             self.accessJwt  = self.jwt['accessJwt']
             self.did        = self.jwt['did']
             self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
-            # TODO: check whether the web-token is still valid
+            try:
+                self.mute()
+                self.unmute()
+            except Exception as e:
+                self.get_jwt()
         else:
             # No, we were not, let's create a new session.
-            session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
-            session_data = {'identifier': self.handle, 'password': self.password}
+            self.get_jwt()
 
-            # Request a permission to fly in the wild blue yonder.
+    def get_jwt(self):
+        session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
+        session_data = {'identifier': self.handle, 'password': self.password}
+
+        # Requesting permission to fly in the wild blue yonder.
+        try:
+            response = self.session.post(
+                url=session_url,
+                json=session_data)
+            response.raise_for_status()
             try:
-                response = self.session.post(
-                    url=session_url,
-                    json=session_data)
-                response.raise_for_status()
-                try:
-                   # Get the handle and access / refresh JWT
-                    self.jwt            = response.json()
-                    self.handle         = self.jwt['handle']
-                    self.accessJwt      = self.jwt['accessJwt']
-                    self.refreshJwt     = self.jwt['refreshJwt']  # Don't know how to use it yet.
-                    self.did            = self.jwt['did']
+                # Get the handle and access / refresh JWT
+                self.jwt = response.json()
+                self.handle = self.jwt['handle']
+                self.accessJwt = self.jwt['accessJwt']
+                self.refreshJwt = self.jwt['refreshJwt']  # Don't know how to use it yet.
+                self.did = self.jwt['did']
 
-                    # Adjust the Session. Install the cookie into the Session.
-                    self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
-                except Exception as e:
-                    raise RuntimeError(f'Huston does not approve:  {e}')
+                # Adjust the Session. Install the cookie into the Session.
+                self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
             except Exception as e:
-                RuntimeError(f'Huston does not respond:  {e}')
+                raise RuntimeError(f'Huston did not give us a JWT:  {e}')
+
+        except Exception as e:
+            raise RuntimeError(f'Huston does not approve:  {e}')
 
     def publish_jwt(self):
         return self.jwt
@@ -224,7 +235,6 @@ class Client(object):
                     }
                 }
         }
-
         try:
             response = self.session.post(
                 url=self.post_url,
@@ -323,9 +333,7 @@ class Client(object):
             }
         )
         response.raise_for_status()
-        res = response.json()
-
-        return res
+        return response.json()
 
     def read_post(self, uri: str, repo: str = None, **kwargs):
         """
@@ -340,9 +348,7 @@ class Client(object):
             }
         )
         response.raise_for_status()
-        res = response.json()
-
-        return res
+        return response.json()
 
     def get_profile(self, actor: str = None, **kwargs):
         """
@@ -354,9 +360,42 @@ class Client(object):
             }
         )
         response.raise_for_status()
-        res = response.json()
+        return response.json()
 
-        return res
+    def get_preferences(self, actor: str = None, **kwargs):
+        """
+        """
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/app.bsky.actor.getPreferences',
+            params = {'actor': actor if actor else self.handle}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def put_preferences(self, actor: str = None, preferences: dict = None, **kwargs):
+        """
+        """
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.actor.putPreferences',
+            json=preferences
+        )
+        response.raise_for_status()
+
+    def mute(self, mute_actor: str = None, **kwargs):
+        """
+        """
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.graph.muteActor',
+            json={'actor': mute_actor if mute_actor else self.actor},  # mute_data
+        )
+        response.raise_for_status()
+
+    def unmute(self, unmute_actor: str = None, **kwargs):
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.graph.unmuteActor',
+            json={'actor': unmute_actor if unmute_actor else self.actor},
+        )
+        response.raise_for_status()
 
 
 if __name__ == "__main__":
@@ -364,6 +403,10 @@ if __name__ == "__main__":
     Quick test.
     """
     butterfly = Client()
+    # res = butterfly.mute()
+    # res_2 = butterfly.unmute()
+    res = butterfly.get_preferences()
+    good = butterfly.put_preferences(preferences=res)
     # GETs from pds_url or public_url = 'https://public.api.bsky.app/'
     # result = butterfly.get_profile(actor=actor)
     # uploaded_blob = butterfly.upload_image(file_path='../../page_001.png', mime_type='image/png')
