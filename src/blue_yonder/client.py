@@ -40,6 +40,7 @@ class Client(object):
         """
             Launch the Butterfly!
         """
+        self.did        = None
         self.handle     = kwargs.get('bluesky_handle',      handle)
         self.password   = kwargs.get('bluesky_password',    password)
         self.actor      = kwargs.get('bluesky_actor',       actor)
@@ -55,8 +56,10 @@ class Client(object):
 
         if self.jwt:
             # We were given a web-token, install the cookie into the Session.
-            self.accessJwt = self.jwt['accessJwt']
+            self.accessJwt  = self.jwt['accessJwt']
+            self.did        = self.jwt['did']
             self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
+            # TODO: check whether the web-token is still valid
         else:
             # No, we were not, let's create a new session.
             session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
@@ -309,15 +312,46 @@ class Client(object):
 
         return res
 
-    def read_post(self, uri: str):
-        pass
+    def get_posts_list(self):
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
+            params={
+                'repo': self.did,
+                'collection': 'app.bsky.feed.post',
+                'limit': 100,
+                'reverse': False  # Last post first in the list
+            }
+        )
+        response.raise_for_status()
+        res = response.json()
 
-    def get_profile(self, actor):
+        return res
+
+    def read_post(self, uri: str, repo: str = None, **kwargs):
+        """
+        """
+        rkey = uri.split("/")[-1]  # is the last part of the URI
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.getRecord',
+            params={
+                'repo': repo if repo else self.did,  # self if not given.
+                'collection': 'app.bsky.feed.post',
+                'rkey': rkey
+            }
+        )
+        response.raise_for_status()
+        res = response.json()
+
+        return res
+
+    def get_profile(self, actor: str = None, **kwargs):
         """
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.actor.getProfile',
-            params = {'actor': actor}
+            params = {
+                'actor': actor if actor else self.handle
+            }
         )
         response.raise_for_status()
         res = response.json()
@@ -335,8 +369,10 @@ if __name__ == "__main__":
     # uploaded_blob = butterfly.upload_image(file_path='../../page_001.png', mime_type='image/png')
     # image_post_text = 'This is a post with an embedded image of a page.'
     # image_result = butterfly.post_image(text=image_post_text, blob=uploaded_blob, alt_text='This is the image of page 001.')
-    result = butterfly.post(text='This is a flap of the butterfly wings that caused the hurricane.')
-    result_del = butterfly.delete_post(uri=result['uri'])
+    result = butterfly.post(text="This is a flap of the butterfly's wings that caused the hurricane.")
+    list_result = butterfly.get_posts_list()
+    read_result = butterfly.read_post(uri=list_result['records'][0]['uri'])
+    result_del = butterfly.delete_post(uri=list_result['records'][0]['uri'])
     # reply_result = butterfly.reply(root_post=quote, post=quote, text='This is a reply to a post.')
     # other_result = butterfly.quote_post(embed_post=quote, text='This is a post with an embedded post.')
     ...
