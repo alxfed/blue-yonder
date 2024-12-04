@@ -7,6 +7,7 @@ LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime, timezone
 from os import environ
+from time import sleep
 import requests
 from json import dumps, loads
 
@@ -168,6 +169,7 @@ class Client(object):
         first_rev = self.last_rev
 
         for post_text in posts_texts:
+            sleep(1)
             self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
 
     def reply(self, root_post: dict, post: dict, text: str):
@@ -405,13 +407,17 @@ if __name__ == "__main__":
     butterfly = Client()
     # res = butterfly.mute()
     # res_2 = butterfly.unmute()
-    res = butterfly.get_preferences()
-    good = butterfly.put_preferences(preferences=res)
+    # res = butterfly.get_preferences()
+    # good = butterfly.put_preferences(preferences=res)
     # GETs from pds_url or public_url = 'https://public.api.bsky.app/'
     # result = butterfly.get_profile(actor=actor)
     # uploaded_blob = butterfly.upload_image(file_path='../../page_001.png', mime_type='image/png')
     # image_post_text = 'This is a post with an embedded image of a page.'
     # image_result = butterfly.post_image(text=image_post_text, blob=uploaded_blob, alt_text='This is the image of page 001.')
+    posts_texts = [
+        'First', 'Second', 'Third', 'Fourth'
+    ]
+    thread_result = butterfly.thread(posts_texts=posts_texts)
     result = butterfly.post(text="This is a flap of the butterfly's wings that caused the hurricane.")
     list_result = butterfly.get_posts_list()
     read_result = butterfly.read_post(uri=list_result['records'][0]['uri'])
