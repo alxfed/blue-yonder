@@ -49,7 +49,7 @@ class Client(object):
         self.actor      = kwargs.get('bluesky_actor',       actor)
         # if you have a Private Data Server specify it as a pds_url kw argument
         self.pds_url    = kwargs.get('pds_url',             pds_url)
-        self.post_url   = None
+        self.post_url   = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
         # If given an old session web-token - use _it_.
         self.jwt        = kwargs.get('jwt', None)
 
