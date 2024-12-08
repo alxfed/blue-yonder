@@ -37,13 +37,14 @@ class Client(object):
     last_rev    = None
     last_blob   = None
 
-    # default actor for testing
-    actor   = 'did:plc:x7lte36djjyhereki5avyst7'
 
     def __init__(self, **kwargs):
         """
             Launch the Butterfly!
         """
+        # default actor for testing
+        actor = 'did:plc:x7lte36djjyhereki5avyst7'
+
         self.did        = None
         self.handle     = kwargs.get('bluesky_handle',      handle)
         self.password   = kwargs.get('bluesky_password',    password)
@@ -357,25 +358,39 @@ class Client(object):
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.actor.getProfile',
-            params = {
-                'actor': actor if actor else self.handle
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-
-    def get_preferences(self, actor: str = None, **kwargs):
-        """
-        """
-        response = self.session.get(
-            url=self.pds_url + '/xrpc/app.bsky.actor.getPreferences',
             params = {'actor': actor if actor else self.handle}
         )
         response.raise_for_status()
         return response.json()
 
-    def put_preferences(self, actor: str = None, preferences: dict = None, **kwargs):
+    def get_preferences(self, **kwargs):
         """
+        Retrieves the current account's preferences from the Private Data Server.
+
+        Returns:
+            dict: A dictionary containing the user's preferences.
+
+        Raises:
+            requests.exceptions.HTTPError: If the request to the Private Data Server fails.
+        """
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/app.bsky.actor.getPreferences'
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def put_preferences(self, preferences: dict = None, **kwargs):
+        """
+        Updates the current account's preferences on the Private Data Server.
+
+        Args:
+            preferences (dict): A dictionary containing the new preferences. Defaults to None.
+
+        Returns:
+            None.
+
+        Raises:
+            requests.exceptions.HTTPError: If the request to the Private Data Server fails.
         """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.actor.putPreferences',
@@ -399,29 +414,88 @@ class Client(object):
         )
         response.raise_for_status()
 
+    def identify(self, handle: str = None, **kwargs):
+        """
+        """
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.graph.identify',
+            json={'handle': handle if handle else self.handle},
+        )
+        response.raise_for_status()
+
+    def records(self, actor: str = None, **kwargs):
+        """
+        """
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
+            params={'repo': actor if actor else self.actor},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def block(self, block_actor: str = None, **kwargs):
+        """
+        Creates a block record for the specified actor.
+
+        Args:
+            block_actor (str, optional): The actor to block. Defaults to None, in which case the current actor is used.
+
+        Returns:
+            dict: The response from the server, containing the created block record.
+
+        Raises:
+            Exception: If the block operation fails.
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        block_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.block',
+            'record':
+                {
+                    '$type': 'app.bsky.graph.block',
+                    'createdAt': now,
+                    'subject': self.actor
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
+            json=block_data  # {'actor': block_actor if block_actor else self.actor},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def unblock(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        post_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.block',
+            'rkey': record_key
+        }
+        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
+        response = self.session.post(url=url_to_del, json=post_data)
+        response.raise_for_status()
+        res = response.json()
+        return res
+
 
 if __name__ == "__main__":
     """
     Quick test.
     """
-    butterfly = Client()
-    # res = butterfly.mute()
-    # res_2 = butterfly.unmute()
-    # res = butterfly.get_preferences()
-    # good = butterfly.put_preferences(preferences=res)
-    # GETs from pds_url or public_url = 'https://public.api.bsky.app/'
-    # result = butterfly.get_profile(actor=actor)
-    # uploaded_blob = butterfly.upload_image(file_path='../../page_001.png', mime_type='image/png')
-    # image_post_text = 'This is a post with an embedded image of a page.'
-    # image_result = butterfly.post_image(text=image_post_text, blob=uploaded_blob, alt_text='This is the image of page 001.')
-    posts_texts = [
-        'First', 'Second', 'Third', 'Fourth'
-    ]
-    thread_result = butterfly.thread(posts_texts=posts_texts)
-    result = butterfly.post(text="This is a flap of the butterfly's wings that caused the hurricane.")
-    list_result = butterfly.get_posts_list()
-    read_result = butterfly.read_post(uri=list_result['records'][0]['uri'])
-    result_del = butterfly.delete_post(uri=list_result['records'][0]['uri'])
-    # reply_result = butterfly.reply(root_post=quote, post=quote, text='This is a reply to a post.')
-    # other_result = butterfly.quote_post(embed_post=quote, text='This is a post with an embedded post.')
+    butterfly = Client() # the .env file is loaded by PyCharm from elsewhere.
+    preferences = butterfly.get_preferences()
+    butterfly.put_preferences(preferences)
     ...

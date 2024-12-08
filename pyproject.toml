@@ -3,11 +3,11 @@ requires = ["setuptools>=75.6.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "blue-yonder"
-version = "0.0.10"
+version = "0.0.11"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
 ]
-description = "Bluesky Python API for inquiring humans."
+description = "Bluesky's Python API for humans."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers=[
