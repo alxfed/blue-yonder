@@ -9,16 +9,21 @@ from datetime import datetime, timezone
 from os import environ
 from time import sleep
 import requests
+from actors import Actor
 from json import dumps, loads
 
 
-handle      = environ.get('BLUESKY_HANDLE')      # the handle of a poster, linker, liker
-password    = environ.get('BLUESKY_PASSWORD')    # the password of this poster
-actor       = environ.get('BLUESKY_ACTOR')       # the actor whose feeds will be used in tests
-pds_url     = environ.get('PDS_URL', 'https://bsky.social')  # the URL of a Private Data Server
+handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
+password    = environ.get('BLUESKY_PASSWORD')   # the password of this poster
+test_actor  = environ.get('BLUESKY_TEST_ACTOR',
+                          'did:plc:x7lte36djjyhereki5avyst7'
+                          )                     # the actor whose feeds will be used in tests
+pds_url     = environ.get('PDS_URL',
+                          'https://bsky.social'
+                          )                     # the URL of a Private Data Server
 
 
-class Client(object):
+class Client(Actor):
     """
         The 'clients' of the blue sky are Birds and Butterflies.
     """
@@ -37,18 +42,15 @@ class Client(object):
     last_rev    = None
     last_blob   = None
 
-
     def __init__(self, **kwargs):
         """
             Launch the Butterfly!
         """
-        # default actor for testing
-        actor = 'did:plc:x7lte36djjyhereki5avyst7'
 
         self.did        = None
         self.handle     = kwargs.get('bluesky_handle',      handle)
         self.password   = kwargs.get('bluesky_password',    password)
-        self.actor      = kwargs.get('bluesky_actor',       actor)
+        self.test_actor = kwargs.get('test_actor',          test_actor)
         # if you have a Private Data Server specify it as a pds_url kw argument
         self.pds_url    = kwargs.get('pds_url',             pds_url)
         self.post_url   = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
@@ -67,11 +69,13 @@ class Client(object):
             try:
                 self.mute()
                 self.unmute()
-            except Exception as e:
+            except RuntimeError:
                 self.get_jwt()
         else:
             # No, we were not, let's create a new session.
             self.get_jwt()
+
+        super(Client, self).__init__(actor=self.did)
 
     def get_jwt(self):
         session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
@@ -403,14 +407,14 @@ class Client(object):
         """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.muteActor',
-            json={'actor': mute_actor if mute_actor else self.actor},  # mute_data
+            json={'actor': mute_actor if mute_actor else self.test_actor},  # mute_data
         )
         response.raise_for_status()
 
     def unmute(self, unmute_actor: str = None, **kwargs):
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.unmuteActor',
-            json={'actor': unmute_actor if unmute_actor else self.actor},
+            json={'actor': unmute_actor if unmute_actor else self.test_actor},
         )
         response.raise_for_status()
 
@@ -428,7 +432,7 @@ class Client(object):
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
-            params={'repo': actor if actor else self.actor},
+            params={'repo': actor if actor else self.test_actor},
         )
         response.raise_for_status()
         return response.json()
@@ -455,7 +459,7 @@ class Client(object):
                 {
                     '$type': 'app.bsky.graph.block',
                     'createdAt': now,
-                    'subject': self.actor
+                    'subject': self.test_actor
                 }
         }
 

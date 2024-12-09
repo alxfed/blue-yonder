@@ -14,5 +14,6 @@ Bird = Client       # aliases
 __all__ = [
     'Client',
     'Butterfly',
-    'Bird'
+    'Bird',
+    'Actor'
 ]

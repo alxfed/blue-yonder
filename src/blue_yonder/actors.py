@@ -22,42 +22,46 @@ class Actor():
         associated (dict)       : Additional information about the Actor.
         did (str)               : The unique identifier of the Actor.
         handle (str)            : The handle of the Actor.
-        display_name (str)      : The display name of the Actor.
+        displayName (str)       : The display name of the Actor.
         labels (list)           : A list of labels associated with the Actor.
-        created_at (datetime)   : The date and time the Actor was created.
+        createdAt (datetime)    : The date and time the Actor was created.
         description (str)       : A description of the Actor.
-        indexed_at (datetime)   : The date and time the Actor was last indexed.
-        followers_count (int)   : The number of followers the Actor has.
-        follows_count (int)     : The number of accounts the Actor follows.
-        posts_count (int)       : The number of posts the Actor has.
-        pinned_post (dict)      : The pinned post of the Actor.
+        indexedAt (datetime)    : The date and time the Actor was last indexed.
+        followersCount (int)    : The number of followers the Actor has.
+        followsCount (int)      : The number of accounts the Actor follows.
+        postsCount (int)        : The number of posts the Actor has.
+        pinnedPost (dict)       : The pinned post of the Actor.
 
     Methods:
         get_profile(actor: str = None):
             Retrieves the profile of the Actor.
     """
 
-    APP_VIEW_API = 'https://public.api.bsky.app'
+    VIEW_API        = 'https://public.api.bsky.app'
     associated      = None
     did             = None
     handle          = None
-    display_name    = None
+    displayName     = None
     labels          = None
-    created_at      = None
+    createdAt       = None
     description     = None
-    indexed_at      = None
-    followers_count = None
-    follows_count   = None
-    posts_count     = None
-    pinned_post     = None
+    indexedAt       = None
+    followersCount  = None
+    followsCount    = None
+    postsCount      = None
+    pinnedPost      = None
 
-    def __init__(self, **kwargs):
-        self.handle = kwargs.get('handle', None)
-        self.did    = kwargs.get('did', None)
-        if self.did:
-            self.get_profile(actor=self.did)
-        elif self.handle:
-            self.get_profile(actor=self.handle)
+    def __init__(self, actor: str = None, **kwargs):
+        """
+        Profile attributes are in the kwargs (obtained by getProfile)
+        """
+        if actor:
+            profile = self.get_profile(actor=actor)
+            for key, value in profile.items():
+                setattr(self, key, value)
+        elif kwargs:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
         else:
             ...
 
@@ -67,28 +71,35 @@ class Actor():
         if not actor:
             actor = self.did if self.did else self.handle
         response = requests.get(
-            url=self.APP_VIEW_API + '/xrpc/app.bsky.actor.getProfile',
+            url=self.VIEW_API + '/xrpc/app.bsky.actor.getProfile',
             params = {'actor': actor}
         )
         response.raise_for_status()
-        r = response.json()
-        self.associated     = r.get('associated', None)
-        self.did            = r.get('did', None)
-        self.handle         = r.get('handle', None)
-        self.display_name   = r.get('displayName', None)
-        self.labels         = r.get('labels', None)
-        self.created_at     = r.get('createdAt', None)
-        self.description    = r.get('description', None)
-        self.indexed_at     = r.get('indexedAt', None)
-        self.followers_count= r.get('followersCount', None)
-        self.follows_count  = r.get('followsCount', None)
-        self.posts_count    = r.get('postsCount', None)
-        self.pinned_post    = r.get('pinnedPost', None)
-        return response.json()
+        res = response.json()
+        for key, value in res.items():
+            setattr(self, key, value)
+        return res
 
 
 if __name__ == '__main__':
-    at_identifier = {'handle': 'alxfed.bsky.social'}
-    actor = Actor(**at_identifier)
-    profile = actor.get_profile()
+    # at_identifier = {'handle': 'alxfed.bsky.social'}
+    # actor = Actor(**at_identifier)
+    profile = {
+        'did': 'did:plc:x7lte36djjyhereki5avyst7',
+        'handle': 'alxfed.bsky.social',
+        'displayName': 'Alex Fedotov',
+        'avatar': 'https://cdn.bsky.app/img/avatar/plain/did:plc:x7lte36djjyhereki5avyst7/bafkreido54oo5qxqtj7z6npkcycsc6uf66ly7jbybytpjjrlchv7jxhohe@jpeg',
+        'associated': {'lists': 4, 'feedgens': 1, 'starterPacks': 0, 'labeler': False, 'chat': {'allowIncoming': 'all'}},
+        'labels': [],
+        'createdAt': '2024-06-15T14:23:24.408Z',
+        'description': 'AI Dialogue Facilitator\nPh. D. in Physics and Mathematics. Data Scientist since 1978\nChicago, IL, since 2003.\n\nIn the past Twitter - @alxfed',
+        'indexedAt': '2024-11-28T13:17:16.343Z',
+        'banner': 'https://cdn.bsky.app/img/banner/plain/did:plc:x7lte36djjyhereki5avyst7/bafkreiaixxnlszzxefchi7nbbkco72vebx2ijvqza7pxl2yrkr76aqmm6u@jpeg',
+        'followersCount': 181,
+        'followsCount': 1560,
+        'postsCount': 201,
+        'pinnedPost': {'cid': 'bafyreibaeqfeggsxmcz2krmio33mqq2rrpahx47qa2iy6xcmo3eri4qtgm', 'uri': 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.post/3lbflilk6kc23'}
+    }
+    # instantiated = Actor(**profile)
+    actor = Actor(actor='did:plc:x7lte36djjyhereki5avyst7')
     ...
