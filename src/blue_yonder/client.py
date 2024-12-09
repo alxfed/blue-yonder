@@ -69,7 +69,7 @@ class Client(Actor):
             try:
                 self.mute()
                 self.unmute()
-            except RuntimeError:
+            except Exception:
                 self.get_jwt()
         else:
             # No, we were not, let's create a new session.
