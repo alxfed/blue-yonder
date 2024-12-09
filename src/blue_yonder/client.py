@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from os import environ
 from time import sleep
 import requests
-from actors import Actor
+from blue_yonder.actors import Actor
 from json import dumps, loads
 
 
