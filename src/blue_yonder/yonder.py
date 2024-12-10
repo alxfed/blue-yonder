@@ -5,11 +5,7 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
-from datetime import datetime, timezone
-from os import environ
-from time import sleep
 import requests
-from json import dumps, loads
 
 
 APP_VIEW_API = 'https://public.api.bsky.app'
@@ -79,12 +75,12 @@ if __name__ == '__main__':
     # profiles = get_profiles(list)
     # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     query = {
-        'q': 'Dvoretzky',
+        'q': 'AI',
         'sort': 'latest',
-        'since': '2024-06-08T21:44:46Z',
-        'until': '2024-12-08T21:44:46Z',
-        'author': 'did:plc:x7lte36djjyhereki5avyst7',
-        'limit': 100
+        'since': '2024-10-08T21:44:46Z',
+        'until': '2024-12-09T21:44:46Z',
+        'limit': 100,
+        'cursor': '100'
     }
     posts = search_posts(query)
     ...

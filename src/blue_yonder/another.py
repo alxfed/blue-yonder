@@ -13,7 +13,7 @@ from json import dumps, loads
 # from .client import Client
 
 
-class Actor():
+class Another():
     """
     Represents an Actor in the BlueSky environment.
     Actor has a unique identifier, a handle, and other associated information.
@@ -80,26 +80,60 @@ class Actor():
             setattr(self, key, value)
         return res
 
+    def get_follows(self, actor: str = None, **kwargs):
+        """
+        """
+        if not actor:
+            actor = self.did if self.did else self.handle
+
+        follows = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.VIEW_API + '/xrpc/app.bsky.graph.getFollows',
+                params={
+                    'actor': actor,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            follows.extend(res['follows'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+        return follows
+
+    def get_followers(self, actor: str = None, **kwargs):
+        """
+        """
+        if not actor:
+            actor = self.did if self.did else self.handle
+
+        followers = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.VIEW_API + '/xrpc/app.bsky.graph.getFollowers',
+                params = {
+                    'actor': actor,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            followers.extend(res['followers'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+        return followers
+
 
 if __name__ == '__main__':
-    # at_identifier = {'handle': 'alxfed.bsky.social'}
-    # actor = Actor(**at_identifier)
-    profile = {
-        'did': 'did:plc:x7lte36djjyhereki5avyst7',
-        'handle': 'alxfed.bsky.social',
-        'displayName': 'Alex Fedotov',
-        'avatar': 'https://cdn.bsky.app/img/avatar/plain/did:plc:x7lte36djjyhereki5avyst7/bafkreido54oo5qxqtj7z6npkcycsc6uf66ly7jbybytpjjrlchv7jxhohe@jpeg',
-        'associated': {'lists': 4, 'feedgens': 1, 'starterPacks': 0, 'labeler': False, 'chat': {'allowIncoming': 'all'}},
-        'labels': [],
-        'createdAt': '2024-06-15T14:23:24.408Z',
-        'description': 'AI Dialogue Facilitator\nPh. D. in Physics and Mathematics. Data Scientist since 1978\nChicago, IL, since 2003.\n\nIn the past Twitter - @alxfed',
-        'indexedAt': '2024-11-28T13:17:16.343Z',
-        'banner': 'https://cdn.bsky.app/img/banner/plain/did:plc:x7lte36djjyhereki5avyst7/bafkreiaixxnlszzxefchi7nbbkco72vebx2ijvqza7pxl2yrkr76aqmm6u@jpeg',
-        'followersCount': 181,
-        'followsCount': 1560,
-        'postsCount': 201,
-        'pinnedPost': {'cid': 'bafyreibaeqfeggsxmcz2krmio33mqq2rrpahx47qa2iy6xcmo3eri4qtgm', 'uri': 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.post/3lbflilk6kc23'}
-    }
-    # instantiated = Actor(**profile)
-    actor = Actor(actor='did:plc:x7lte36djjyhereki5avyst7')
+    alex = Another(actor='did:plc:x7lte36djjyhereki5avyst7')
+    follows = alex.get_follows()
     ...

@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from os import environ
 from time import sleep
 import requests
-from blue_yonder.actors import Actor
-from json import dumps, loads
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -23,7 +21,7 @@ pds_url     = environ.get('PDS_URL',
                           )                     # the URL of a Private Data Server
 
 
-class Client(Actor):
+class Actor:
     """
         The 'clients' of the blue sky are Birds and Butterflies.
     """
@@ -54,17 +52,16 @@ class Client(Actor):
         # if you have a Private Data Server specify it as a pds_url kw argument
         self.pds_url    = kwargs.get('pds_url',             pds_url)
         self.post_url   = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
-        # If given an old session web-token - use _it_.
         self.jwt        = kwargs.get('jwt', None)
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
-        # self.post_url = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
 
+        # If given an old session web-token - use _it_.
         if self.jwt:
             # We were given a web-token, install the cookie into the Session.
-            self.accessJwt  = self.jwt['accessJwt']
-            self.did        = self.jwt['did']
+            for key, value in self.jwt.items():
+                setattr(self, key, value)
             self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
             try:
                 self.mute()
@@ -74,8 +71,6 @@ class Client(Actor):
         else:
             # No, we were not, let's create a new session.
             self.get_jwt()
-
-        super(Client, self).__init__(actor=self.did)
 
     def get_jwt(self):
         session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
@@ -90,11 +85,8 @@ class Client(Actor):
             try:
                 # Get the handle and access / refresh JWT
                 self.jwt = response.json()
-                self.handle = self.jwt['handle']
-                self.accessJwt = self.jwt['accessJwt']
-                self.refreshJwt = self.jwt['refreshJwt']  # Don't know how to use it yet.
-                self.did = self.jwt['did']
-
+                for key, value in self.jwt.items():
+                    setattr(self, key, value)
                 # Adjust the Session. Install the cookie into the Session.
                 self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
             except Exception as e:
@@ -135,6 +127,63 @@ class Client(Actor):
 
         except Exception as e:
             raise Exception(f"Error, with talking to Huston:  {e}")
+        return res
+
+    def like(self, uri: str = None, cid: str = None, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        like_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.like',
+            'record':
+                {
+                    '$type': 'app.bsky.feed.like',
+                    'createdAt': now,
+                    'subject': {
+                        'uri': uri,
+                        'cid': cid
+                    }
+                }
+        }
+
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=like_data)
+
+            response.raise_for_status()
+            res = response.json()
+
+        except Exception as e:
+            raise Exception(f"Error, with talking to Huston:  {e}")
+
+        return res
+
+    def unlike(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        like_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.like',
+            'rkey': record_key
+        }
+        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
+        response = self.session.post(
+            url=url_to_del,
+            json=like_data
+        )
+        response.raise_for_status()
+        res = response.json()
         return res
 
     def delete_post(self, uri: str = None, record_key: str = None, **kwargs):
@@ -418,31 +467,32 @@ class Client(Actor):
         )
         response.raise_for_status()
 
-    def identify(self, handle: str = None, **kwargs):
-        """
-        """
-        response = self.session.post(
-            url=self.pds_url + '/xrpc/app.bsky.graph.identify',
-            json={'handle': handle if handle else self.handle},
-        )
-        response.raise_for_status()
-
     def records(self, actor: str = None, **kwargs):
         """
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
-            params={'repo': actor if actor else self.test_actor},
+            params={'repo': actor if actor else self.did},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def describe(self, actor: str = None, **kwargs):
+        """
+        """
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.describeRepo',
+            params={'repo': actor if actor else self.did},
         )
         response.raise_for_status()
         return response.json()
 
     def block(self, block_actor: str = None, **kwargs):
         """
-        Creates a block record for the specified actor.
+        Blocks the specified actor.
 
         Args:
-            block_actor (str, optional): The actor to block. Defaults to None, in which case the current actor is used.
+            block_actor (str, optional): The actor to block. Defaults to None.
 
         Returns:
             dict: The response from the server, containing the created block record.
@@ -459,7 +509,7 @@ class Client(Actor):
                 {
                     '$type': 'app.bsky.graph.block',
                     'createdAt': now,
-                    'subject': self.test_actor
+                    'subject': block_actor
                 }
         }
 
@@ -473,33 +523,135 @@ class Client(Actor):
     def unblock(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
         if uri:
             record_key = uri.split("/")[-1]
-        # Prepare to post
         elif record_key:
             pass
         else:
             raise Exception('Either uri or record_key must be given.')
 
+        # Prepare to post
         post_data = {
             'repo': self.did,  # self.handle,
             'collection': 'app.bsky.graph.block',
             'rkey': record_key
         }
+
         url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
-        response = self.session.post(url=url_to_del, json=post_data)
+        response = self.session.post(
+            url=url_to_del,
+            json=post_data
+        )
         response.raise_for_status()
-        res = response.json()
-        return res
+
+        return response.json()
+
+    def follow(self, follow_actor: str = None, **kwargs):
+        """
+        Follows the specified actor.
+
+        Args:
+            follow_actor (str, optional): The actor to block. Defaults to None.
+
+        Returns:
+            dict: The response from the server, containing the created block record.
+
+        Raises:
+            Exception: If the block operation fails.
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        follow_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.follow',
+            'record':
+                {
+                    '$type': 'app.bsky.graph.follow',
+                    'createdAt': now,
+                    'subject': follow_actor
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
+            json=follow_data  # {'actor': block_actor if block_actor else self.actor},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def unfollow(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        Unfollows the actor specified in the record.
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        # Prepare to post
+        unfollow_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.follow',
+            'rkey': record_key
+        }
+
+        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
+        response = self.session.post(
+            url=url_to_del,
+            json=unfollow_data
+        )
+        response.raise_for_status()
+
+        return response.json()
+
+    def add_list(self, follow_actor: str = None, **kwargs):
+        """
+        Follows the specified actor.
+
+        Args:
+            follow_actor (str, optional): The actor to block. Defaults to None.
+
+        Returns:
+            dict: The response from the server, containing the created block record.
+
+        Raises:
+            Exception: If the block operation fails.
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        follow_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.follow',
+            'record':
+                {
+                    '$type': 'app.bsky.graph.follow',
+                    'createdAt': now,
+                    'subject': follow_actor
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
+            json=follow_data  # {'actor': block_actor if block_actor else self.actor},
+        )
+        response.raise_for_status()
+        return response.json()
+
 
 
 if __name__ == "__main__":
     """
     Quick test.
     """
-    butterfly = Client() # the .env file is loaded by PyCharm from elsewhere.
-    preferences = butterfly.get_preferences()
-    butterfly.put_preferences(preferences)
+    my_actor = Actor() # the .env file is loaded by PyCharm from elsewhere.
+    description = my_actor.describe()
+    followed = my_actor.follow(follow_actor=test_actor)
+    unfollowed = my_actor.unfollow(uri=followed['uri'])
+    post = my_actor.post(text='This is a post')
+    like = my_actor.like(**post)
+    unlike = my_actor.unlike(uri=like['uri'])
+    preferences = my_actor.get_preferences()
+    my_actor.put_preferences(preferences)
     ...

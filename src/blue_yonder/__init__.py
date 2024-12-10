@@ -5,15 +5,17 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
-from .client import Client
-from .actors import Actor
+from .actor import Actor
+from .another import Another
+from .yonder import search_posts
 
-Butterfly = Client  # playful
-Bird = Client       # aliases
+Butterfly = Actor  # playful
+Bird = Actor       # aliases
 
 __all__ = [
-    'Client',
+    'Actor',
     'Butterfly',
     'Bird',
-    'Actor'
+    'Another',
+    'search_posts'
 ]

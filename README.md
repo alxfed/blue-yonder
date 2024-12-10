@@ -1,5 +1,12 @@
 # Blue Yonder
-Bluesky Python API for humans.
+This is a Bluesky Python API for humans. It can be used for the simple automations that you _know_ should be implemented, but they are 'not there' in a pretty annoyingly way. But you know how to program in Python... And you have an IDE like PyCharm(R) or VSCode...
+
+Or, maybe, you are experimenting with Language Models and would like to see how _they_ will make your 'social presense' less stressful and more meaningful but assessing whether the content that you are about to see is worth looking at or it is something that you will wish to 'unsee' later...
+
+## Here comes the Blue Yonder Python package
+It has been built with a perspective of a person who does not need the professional jargon of software engineers or 'coders'. The logged in entity that performs actions on your behalf in the Bluesky network - posts, replies, likes, follows, blocks, mutes,etc. is called... you guessed it right, an Actor (not a 'Client' or 'User', God forbid); the other entity whose profile or content are of interest for you and should be brought into focus is called... you guessed it right again - Another. The collection of functions that let you interact with the Bluesky network is called 'yonder', you can import it as a whole or just the functions that you need.
+
+## Installation
 ```Bash
   pip install blue-yonder
 ```
@@ -9,16 +16,8 @@ Then:
 ```Python
 # Python
 
-from blue_yonder import Client
+from blue_yonder import Actor
 ```
-Note: the library name has an underscore `_` between the words.
-<br>There are more 'playful' aliases for the `blue_yonder` Client too, namely:
-```Python
-from blue_yonder import Butterfly
-# or
-from blue_yonder import Bird
-```
-This is because Butterflies and Birds are the main 'clients' of the blue sky of course.
 
-## Usage Examples
-I didn't want to overload this repository and library with examples; you can use the Template repository with multiple examples, that I consider to be useful. It is located [here](https://github.com/alxfed/butterfly). Just click the 'Use this template' button at the top of the page and create your own repository in your account that you can edit and use the way you deem fit.
+## How to use it
+I didn't want to overload this repository and library with examples; you can use the 'template repository' with multiple examples, that I considered to be useful for myself when I was studying the Bluesky API. It is located [here](https://github.com/alxfed/butterfly). Just click the 'Use this template' button at the top of that page and create your own repository in your account that you can edit and use the way you deem fit.
