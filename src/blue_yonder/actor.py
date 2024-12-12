@@ -40,7 +40,7 @@ class Actor:
 
     def __init__(self, **kwargs):
         """
-            Launch the Butterfly!
+            Create an Actor
         """
 
         self.did            = None
@@ -74,6 +74,10 @@ class Actor:
             self._get_token()
 
     def _get_token(self):
+        """
+        Initiate a session, get a JWT, ingest all the parameters
+        :return:
+        """
         session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
         session_data = {'identifier': self.handle, 'password': self.password}
 
@@ -94,7 +98,7 @@ class Actor:
                 raise RuntimeError(f'Huston did not give us a JWT:  {e}')
 
         except Exception as e:
-            raise RuntimeError(f'Huston does not approve:  {e}')
+            raise RuntimeError(f'Huston does not identify you as a human, you are a UFO:  {e}')
 
     def post(self, text: str = None, **kwargs):
         """
@@ -114,7 +118,6 @@ class Actor:
                     'createdAt': now
                 }
         }
-
         try:
             response = self.session.post(url=self.post_url, json=post_data)
             response.raise_for_status()
@@ -269,6 +272,11 @@ class Actor:
 
     def quote_post(self, embed_post: dict, text: str):
         """
+        Embed a given post (with 'uri' and 'cid') into a new post.
+        embed_post: {'uri': uri, 'cid': cid}
+        text: string up to 300 characters
+
+        output: {'uri': uri, 'cid': cid, ...}
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -376,12 +384,11 @@ class Actor:
 
         return res
 
-    def get_posts_list(self):
+    def last_posts(self, repo: str = None, **kwargs):
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
             params={
-                'repo': self.did,
-                'collection': 'app.bsky.feed.post',
+                'repo': repo if repo else self.did,  # self if not given.
                 'limit': 100,
                 'reverse': False  # Last post first in the list
             }
@@ -391,6 +398,7 @@ class Actor:
 
     def read_post(self, uri: str, repo: str = None, **kwargs):
         """
+        Read a post with given uri in a given repo. Defaults to own repo.
         """
         rkey = uri.split("/")[-1]  # is the last part of the URI
         response = self.session.get(
@@ -406,10 +414,11 @@ class Actor:
 
     def get_profile(self, actor: str = None, **kwargs):
         """
+        Get profile of a given actor. Defaults to actor's own.
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.actor.getProfile',
-            params = {'actor': actor if actor else self.handle}
+            params={'actor': actor if actor else self.handle}
         )
         response.raise_for_status()
         return response.json()
@@ -417,10 +426,8 @@ class Actor:
     def get_preferences(self, **kwargs):
         """
         Retrieves the current account's preferences from the Private Data Server.
-
         Returns:
             dict: A dictionary containing the user's preferences.
-
         Raises:
             requests.exceptions.HTTPError: If the request to the Private Data Server fails.
         """
@@ -433,13 +440,10 @@ class Actor:
     def put_preferences(self, preferences: dict = None, **kwargs):
         """
         Updates the current account's preferences on the Private Data Server.
-
         Args:
             preferences (dict): A dictionary containing the new preferences. Defaults to None.
-
         Returns:
             None.
-
         Raises:
             requests.exceptions.HTTPError: If the request to the Private Data Server fails.
         """
@@ -447,10 +451,12 @@ class Actor:
             url=self.pds_url + '/xrpc/app.bsky.actor.putPreferences',
             json=preferences
         )
+        # The only thing this endpoint returns are codes. Nothing to return.
         response.raise_for_status()
 
     def mute(self, mute_actor: str = None, **kwargs):
         """
+        Mutes the specified actor.
         """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.muteActor',
@@ -459,6 +465,8 @@ class Actor:
         response.raise_for_status()
 
     def unmute(self, unmute_actor: str = None, **kwargs):
+        """ Unmutes the specified actor.
+        """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.unmuteActor',
             json={'actor': unmute_actor if unmute_actor else self.test_actor},
@@ -467,6 +475,8 @@ class Actor:
 
     def records(self, actor: str = None, collection: str = None, **kwargs):
         """
+        A general function for getting records of a given collection.
+        Defaults to own repo.
         """
         records = []
         still_some = True
@@ -621,7 +631,7 @@ class Actor:
 
     def search_posts(self, query: dict):
         """
-        Search for the first 100 posts (because the paginated search is forbidden by Bluesky).
+        Search for the first not more than100 posts (because the paginated search is prohibited by Bluesky).
 
         Search for posts. Parameters of the query:
 
@@ -708,7 +718,10 @@ class Actor:
 
     def unrestrict(self, uri: str = None, record_key: str = None, **kwargs):
         """
-        Delete the record restricting access to the thread.
+        Delete the record restricting access to a thread.
+        record_key: the key of the record
+          - or -
+        uri: the uri of the record
         """
         if uri:
             record_key = uri.split("/")[-1]
@@ -718,7 +731,6 @@ class Actor:
             'collection':   'app.bsky.feed.threadgate',
             'rkey':         record_key
         }
-
         try:
             response = self.session.post(
                 url=self.delete_url,
