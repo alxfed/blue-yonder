@@ -657,10 +657,8 @@ class Actor:
 
             limit: integer (optional) Possible values: >= 1 and <= 100. Default value: 25
 
-            cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
-
             Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
-            but that was posted long before the scandal.
+            but that was posted long before the scandal and the disabling of pagination.
         """
 
         response = self.session.get(
@@ -753,7 +751,7 @@ if __name__ == "__main__":
     #     'until': '2024-12-10T21:44:46Z',
     #     'limit': 100
     # }
-    my_actor = Actor(bluesky_handle='alxfed.bsky.social') # the .env file is loaded by PyCharm from elsewhere.
+    # my_actor = Actor(bluesky_handle='alxfed.bsky.social') # the .env file is loaded by PyCharm from elsewhere.
     # post = my_actor.post(text='This is a post with limited access')
     # EXAMPLE_LIST_URI = 'at://did:plc:yjvzk3c3uanrlrsdm4uezjqi/app.bsky.graph.list/3lcxml5gmf32s'
     # rules = [
@@ -764,7 +762,7 @@ if __name__ == "__main__":
 
     # result = my_actor.allowed(uri=post['uri'], rules=rules)
     # posts = my_actor.search_posts(query)
-    records = my_actor.records(collection='app.bsky.feed.post')
+    # records = my_actor.records(collection='app.bsky.feed.post')
     # records = my_actor.permissions()
     # posts = my_actor.get_posts_list()
     # posts_content = []
@@ -773,12 +771,12 @@ if __name__ == "__main__":
     #     posts_content.append(content)
     # for record in records['records']:
     #     my_actor.unrestrict(uri=record['uri'])
-    description = my_actor.describe()
-    followed = my_actor.follow(follow_actor=test_actor)
-    unfollowed = my_actor.unfollow(uri=followed['uri'])
-    post = my_actor.post(text='This is a post')
-    like = my_actor.like(**post)
-    unlike = my_actor.unlike(uri=like['uri'])
-    preferences = my_actor.get_preferences()
-    my_actor.put_preferences(preferences)
+    # description = my_actor.describe()
+    # followed = my_actor.follow(follow_actor=test_actor)
+    # unfollowed = my_actor.unfollow(uri=followed['uri'])
+    # post = my_actor.post(text='This is a post')
+    # like = my_actor.like(**post)
+    # unlike = my_actor.unlike(uri=like['uri'])
+    # preferences = my_actor.get_preferences()
+    # my_actor.put_preferences(preferences)
     ...
