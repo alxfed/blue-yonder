@@ -3,12 +3,11 @@ requires = ["setuptools>=75.6.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "blue-yonder"
-version = "0.0.17"
+version = "0.0.18"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
 ]
 description = "Bluesky Python API for humans."
-long_description = "The Bluesky network creators were so busy with their own view of their enterprise as 'an implementation of a protocol' that they didn't separate in their code and documentation the different logical levels of participation of entities in their network. In this package I tried to set apart the 'active participation' which consists of the actions (posts, uploads, likes, follows, blocks, mutes, etc.) by a (logged in) **Actor**... sorry for the reiteration of the 'act' root bounding with tautology... from the 'passive observation' of **Another** entity, its profile, posts, likes, followers, lists, feeds, etc. that can be done by a not logged into the Bluesky and, hence, 'anonymous' computer on the Internet . Besides that, on a yet another level, there are pure functions of the network/environment too - the search functions, and other utilities of the environment, which I stored in the **yonder** module, where you can import them from as a whole or individually."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers=[
