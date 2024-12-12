@@ -9,13 +9,13 @@ from .actor import Actor
 from .another import Another
 from .yonder import search_posts
 
-Butterfly = Actor  # playful
-Bird = Actor       # aliases
+Butterfly   = Actor     # playful
+Flower      = Another   # aliases
 
 __all__ = [
     'Actor',
     'Butterfly',
-    'Bird',
     'Another',
+    'Flower',
     'search_posts'
 ]

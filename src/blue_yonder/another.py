@@ -134,6 +134,9 @@ class Another():
 
 
 if __name__ == '__main__':
+    """ Quick tests
+    """
     alex = Another(actor='did:plc:x7lte36djjyhereki5avyst7')
+    followers = alex.get_followers()
     follows = alex.get_follows()
     ...

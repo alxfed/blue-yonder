@@ -13,12 +13,8 @@ import requests
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
 password    = environ.get('BLUESKY_PASSWORD')   # the password of this poster
-test_actor  = environ.get('BLUESKY_TEST_ACTOR',
-                          'did:plc:x7lte36djjyhereki5avyst7'
-                          )                     # the actor whose feeds will be used in tests
-pds_url     = environ.get('PDS_URL',
-                          'https://bsky.social'
-                          )                     # the URL of a Private Data Server
+test_actor  = environ.get('BLUESKY_TEST_ACTOR', 'did:plc:x7lte36djjyhereki5avyst7')
+pds_url     = environ.get('PDS_URL', 'https://bsky.social')  # the URL of a Private Data Server
 
 
 class Actor:
@@ -28,6 +24,8 @@ class Actor:
     session     = requests.Session()
     post_url    = None
     upload_url  = None
+    update_url  = None
+    delete_url  = None
     did         = None
     accessJwt   = None
     refreshJwt  = None
@@ -45,14 +43,17 @@ class Actor:
             Launch the Butterfly!
         """
 
-        self.did        = None
-        self.handle     = kwargs.get('bluesky_handle',      handle)
-        self.password   = kwargs.get('bluesky_password',    password)
-        self.test_actor = kwargs.get('test_actor',          test_actor)
+        self.did            = None
+        self.handle         = kwargs.get('bluesky_handle',      handle)
+        self.password       = kwargs.get('bluesky_password',    password)
+        self.test_actor     = kwargs.get('test_actor',          test_actor)
         # if you have a Private Data Server specify it as a pds_url kw argument
-        self.pds_url    = kwargs.get('pds_url',             pds_url)
-        self.post_url   = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
-        self.jwt        = kwargs.get('jwt', None)
+        self.pds_url        = kwargs.get('pds_url',             pds_url)
+        self.records_url    = self.pds_url + '/xrpc/com.atproto.repo.listRecords'
+        self.post_url       = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
+        self.delete_url     = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
+        self.update_url     = self.pds_url + '/xrpc/com.atproto.repo.putRecord'
+        self.jwt            = kwargs.get('jwt', None)
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
@@ -67,12 +68,12 @@ class Actor:
                 self.mute()
                 self.unmute()
             except Exception:
-                self.get_jwt()
+                self._get_token()
         else:
             # No, we were not, let's create a new session.
-            self.get_jwt()
+            self._get_token()
 
-    def get_jwt(self):
+    def _get_token(self):
         session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
         session_data = {'identifier': self.handle, 'password': self.password}
 
@@ -94,9 +95,6 @@ class Actor:
 
         except Exception as e:
             raise RuntimeError(f'Huston does not approve:  {e}')
-
-    def publish_jwt(self):
-        return self.jwt
 
     def post(self, text: str = None, **kwargs):
         """
@@ -467,15 +465,30 @@ class Actor:
         )
         response.raise_for_status()
 
-    def records(self, actor: str = None, **kwargs):
+    def records(self, actor: str = None, collection: str = None, **kwargs):
         """
         """
-        response = self.session.get(
-            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
-            params={'repo': actor if actor else self.did},
-        )
-        response.raise_for_status()
-        return response.json()
+        records = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.records_url,
+                params={
+                    'repo': actor if actor else self.did,
+                    'collection': collection,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            records.extend(res['records'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+
+        return records
 
     def describe(self, actor: str = None, **kwargs):
         """
@@ -606,46 +619,148 @@ class Actor:
 
         return response.json()
 
-    def add_list(self, follow_actor: str = None, **kwargs):
+    def search_posts(self, query: dict):
         """
-        Follows the specified actor.
+        Search for the first 100 posts (because the paginated search is forbidden by Bluesky).
 
-        Args:
-            follow_actor (str, optional): The actor to block. Defaults to None.
+        Search for posts. Parameters of the query:
 
-        Returns:
-            dict: The response from the server, containing the created block record.
+            q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
 
-        Raises:
-            Exception: If the block operation fails.
+            sort: string (optional) Possible values: [top, latest]. Specifies the ranking order of results. Default value: latest.
+
+            since: string (optional) Filter results for posts after the indicated datetime (inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
+
+            until: string (optional) Filter results for posts before the indicated datetime (not inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
+
+            mentions: at-identifier (optional) Filter to posts which mention the given account. Handles are resolved to DID before query-time. Only matches rich-text facet mentions.
+
+            author: at-identifier (optional) Filter to posts by the given account. Handles are resolved to DID before query-time.
+
+            lang: language (optional) Filter to posts in the given language. Expected to be based on post language field, though server may override language detection.
+
+            domain: string (optional) Filter to posts with URLs (facet links or embeds) linking to the given domain (hostname). Server may apply hostname normalization.
+
+            url: uri (optional) Filter to posts with links (facet links or embeds) pointing to this URL. Server may apply URL normalization or fuzzy matching.
+
+            tag: string[] Possible values: <= 640 characters. Filter to posts with the given tag (hashtag), based on rich-text facet or tag field. Do not include the hash (#) prefix. Multiple tags can be specified, with 'AND' matching.
+
+            limit: integer (optional) Possible values: >= 1 and <= 100. Default value: 25
+
+            cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
+
+            Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
+            but that was posted long before the scandal.
         """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        follow_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.graph.follow',
-            'record':
-                {
-                    '$type': 'app.bsky.graph.follow',
-                    'createdAt': now,
-                    'subject': follow_actor
-                }
-        }
+        response = self.session.get(
+                url=self.pds_url + '/xrpc/app.bsky.feed.searchPosts',
+                params=query
+        )
+        response.raise_for_status()
+        return response.json()['posts']
 
-        response = self.session.post(
-            url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
-            json=follow_data  # {'actor': block_actor if block_actor else self.actor},
+    def permissions(self, uri: str = None, **kwargs):
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
+            params={
+                'repo': self.did,
+                'collection': 'app.bsky.feed.threadgate',}
         )
         response.raise_for_status()
         return response.json()
 
+    def allow(self, uri: str = None, rules: list = None, **kwargs):
+        """
+        Set the rules of interaction with a thread. List of up to 5 rules.
+        The possible rules are:
+        1. If anybody can interact with the thread there is no record.
+        2. {'$type': 'app.bsky.feed.threadgate#mentionRule'},
+        3. {'$type': 'app.bsky.feed.threadgate#followingRule'},
+        4. {'$type': 'app.bsky.feed.threadgate#listRule',
+         'list': 'at://did:plc:yjvzk3c3uanrlrsdm4uezjqi/app.bsky.graph.list/3lcxml5gmf32s'}
+        5. if nobody (besides the actor) can interact with the post 'allow' is an empty list - '[]'
+
+        uri: the uri of the post
+        rules: the list of rules (as dictionaries), up to 5 rules.
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        threadgate_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.threadgate',
+            'rkey': uri.split("/")[-1],
+            'record':
+                {
+                    '$type':        'app.bsky.feed.threadgate',
+                    'createdAt':    now,
+                    'post':         uri,
+                    'allow':        rules
+                }
+        }
+
+        response = self.session.post(
+            url=self.update_url,
+            json=threadgate_data  #
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def unrestrict(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        Delete the record restricting access to the thread.
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        post_data = {
+            'repo':         self.did,   # self.handle,
+            'collection':   'app.bsky.feed.threadgate',
+            'rkey':         record_key
+        }
+
+        try:
+            response = self.session.post(
+                url=self.delete_url,
+                json=post_data)
+            response.raise_for_status()
+
+        except Exception as e:
+            raise Exception(f"Can not delete the restriction:  {e}")
+        return response.json()
 
 
 if __name__ == "__main__":
     """
     Quick test.
     """
-    my_actor = Actor() # the .env file is loaded by PyCharm from elsewhere.
+    # query = {
+    #     'q': 'AI',
+    #     'sort': 'latest',
+    #     'since': '2024-11-05T21:44:46Z',
+    #     'until': '2024-12-10T21:44:46Z',
+    #     'limit': 100
+    # }
+    my_actor = Actor(bluesky_handle='alxfed.bsky.social') # the .env file is loaded by PyCharm from elsewhere.
+    # post = my_actor.post(text='This is a post with limited access')
+    # EXAMPLE_LIST_URI = 'at://did:plc:yjvzk3c3uanrlrsdm4uezjqi/app.bsky.graph.list/3lcxml5gmf32s'
+    # rules = [
+    #     {'$type': 'app.bsky.feed.threadgate#mentionRule'},
+    #     {'$type': 'app.bsky.feed.threadgate#followingRule'},
+    #     {'$type': 'app.bsky.feed.threadgate#listRule', 'list': EXAMPLE_LIST_URI}
+    # ]  # Nobody can interact with the post is an empty list - '[]'
+
+    # result = my_actor.allowed(uri=post['uri'], rules=rules)
+    # posts = my_actor.search_posts(query)
+    records = my_actor.records(collection='app.bsky.feed.post')
+    # records = my_actor.permissions()
+    # posts = my_actor.get_posts_list()
+    # posts_content = []
+    # for post in posts['records']:
+    #     content = my_actor.read_post(post['uri'])
+    #     posts_content.append(content)
+    # for record in records['records']:
+    #     my_actor.unrestrict(uri=record['uri'])
     description = my_actor.describe()
     followed = my_actor.follow(follow_actor=test_actor)
     unfollowed = my_actor.unfollow(uri=followed['uri'])

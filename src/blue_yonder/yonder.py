@@ -29,9 +29,43 @@ def get_profiles(actors: list):
         raise Exception('Too many actors.')
 
 
+def search_actors(query: dict):
+    """
+    Search for actors. Parameters:
+
+        q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
+
+        limit: integer (optional) Possible values: >= 1 and <= 100. Default value: 25
+
+        cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
+
+        Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
+    """
+
+    actors = []
+    still_some = True
+    cursor = None
+    while still_some:
+        response = requests.get(
+            url=APP_VIEW_API + '/xrpc/app.bsky.actor.searchActors',
+            params={
+                'q': query,
+                'limit': 50,
+                'cursor': cursor}
+        )
+        response.raise_for_status()
+        res = response.json()
+        actors.extend(res['actors'])
+        if 'cursor' in res:
+            cursor = res['cursor']
+        else:
+            still_some = False
+    return actors
+
+
 def search_posts(query: dict):
     """
-    Search for posts. Parameters:
+    Search for posts. Parameters of the query:
 
         q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
 
@@ -59,12 +93,23 @@ def search_posts(query: dict):
 
         Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
     """
-    response = requests.get(
-        url=APP_VIEW_API + '/xrpc/app.bsky.feed.searchPosts',
-        params=query
-    )
-    response.raise_for_status()
-    return response.json()
+
+    posts = []
+    still_some = True
+    cursor = None
+    while still_some:
+        response = requests.get(
+            url=APP_VIEW_API + '/xrpc/app.bsky.feed.searchPosts',
+            params= query | {'cursor': cursor}
+        )
+        response.raise_for_status()
+        res = response.json()
+        posts.extend(res['posts'])
+        if 'cursor' in res:
+            cursor = res['cursor']
+        else:
+            still_some = False
+    return posts
 
 
 if __name__ == '__main__':
@@ -74,13 +119,15 @@ if __name__ == '__main__':
     # ]
     # profiles = get_profiles(list)
     # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # query = 'Game Theory'
+    # actors = search_actors(query)
+
     query = {
         'q': 'AI',
         'sort': 'latest',
-        'since': '2024-10-08T21:44:46Z',
-        'until': '2024-12-09T21:44:46Z',
-        'limit': 100,
-        'cursor': '100'
+        'since': '2024-11-05T21:44:46Z',
+        'until': '2024-12-10T21:44:46Z',
+        'limit': 100
     }
-    posts = search_posts(query)
+    found_posts = search_posts(query)
     ...
