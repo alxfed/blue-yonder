@@ -15,8 +15,9 @@ from json import dumps, loads
 
 class Another():
     """
-    Represents an Actor in the BlueSky environment.
-    Actor has a unique identifier, a handle, and other associated information.
+    Represents an entity in the BlueSky environment.
+    'Actor' (in their terminology) has a unique identifier, a handle,
+    a display name, and other associated information.
 
     Attributes:
         associated (dict)       : Additional information about the Actor.
@@ -56,7 +57,7 @@ class Another():
         Profile attributes are in the kwargs (obtained by getProfile)
         """
         if actor:
-            profile = self.get_profile(actor=actor)
+            profile = self._get_profile(actor=actor)
             for key, value in profile.items():
                 setattr(self, key, value)
         elif kwargs:
@@ -65,7 +66,7 @@ class Another():
         else:
             ...
 
-    def get_profile(self, actor: str = None, **kwargs):
+    def _get_profile(self, actor: str = None, **kwargs):
         """
         """
         if not actor:
@@ -80,7 +81,7 @@ class Another():
             setattr(self, key, value)
         return res
 
-    def get_follows(self, actor: str = None, **kwargs):
+    def follows(self, actor: str = None, **kwargs):
         """
         """
         if not actor:
@@ -106,7 +107,7 @@ class Another():
                 still_some = False
         return follows
 
-    def get_followers(self, actor: str = None, **kwargs):
+    def followers(self, actor: str = None, **kwargs):
         """
         """
         if not actor:
@@ -137,6 +138,6 @@ if __name__ == '__main__':
     """ Quick tests
     """
     alex = Another(actor='did:plc:x7lte36djjyhereki5avyst7')
-    followers = alex.get_followers()
-    follows = alex.get_follows()
+    followers = alex.followers()
+    follows = alex.follows()
     ...
