@@ -29,6 +29,25 @@ def get_profiles(actors: list):
         raise Exception('Too many actors.')
 
 
+def feed(feed: dict = None, **kwargs):
+    """
+    """
+    if not feed:
+        feed = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed',
+                'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
+    response = requests.get(
+        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
+        params={
+            'feed': feed['value'],
+            'limit': 50,
+            'cursor': None
+        }
+    )
+    response.raise_for_status()
+    res = response.json()
+    return res
+
+
 def search_actors(query: dict):
     """
     Search for actors. Parameters:
@@ -165,5 +184,6 @@ if __name__ == '__main__':
         'until': '2024-12-10T21:44:46Z',
         'limit': 100
     }
-    found_posts = search_100_posts(query)
+    # found_posts = search_100_posts(query)
+    feed = feed()
     ...

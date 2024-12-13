@@ -133,11 +133,71 @@ class Another():
                 still_some = False
         return followers
 
+    def created_feeds(self, actor: str = None, **kwargs):
+        """
+        """
+        if not actor:
+            actor = self.did if self.did else self.handle
+        response = requests.get(
+            url=self.VIEW_API + '/xrpc/app.bsky.feed.getActorFeeds',
+            params={'actor': actor}
+        )
+        response.raise_for_status()
+        res = response.json()
+        return res
+
+    def lists(self, actor: str = None, **kwargs):
+        """
+        """
+        if not actor:
+            actor = self.did if self.did else self.handle
+        response = requests.get(
+            url=self.VIEW_API + '/xrpc/app.bsky.graph.getLists',
+            params={'actor': actor}
+        )
+        response.raise_for_status()
+        res = response.json()
+        return res
+
+    def authored(self, filter: list = None, **kwargs):
+        """
+        """
+        if not filter:
+            filter = [
+                'posts_with_replies',
+                'posts_no_replies',
+                # 'posts_with_media',
+                'posts_and_author_threads'
+            ]
+        response = requests.get(
+            url=self.VIEW_API + '/xrpc/app.bsky.feed.getAuthorFeed',
+            params={
+                'actor': self.did,
+                'limit': 50,
+                'cursor': None,
+                'filter': filter,
+                'includePins': True
+            }
+        )
+        response.raise_for_status()
+        res = response.json()
+        return res
+
 
 if __name__ == '__main__':
     """ Quick tests
     """
     alex = Another(actor='did:plc:x7lte36djjyhereki5avyst7')
+    # feed_id = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
+    select = [
+        'posts_with_replies',
+        'posts_no_replies',
+        'posts_with_media',
+        'posts_and_author_threads'
+    ]
+    feed = alex.authored(filter=select)
+    lists = alex.lists()
+    feeds = alex.created_feeds()
     followers = alex.followers()
     follows = alex.follows()
     ...

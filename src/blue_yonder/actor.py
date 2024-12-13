@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from os import environ
 from time import sleep
 import requests
+from collections import defaultdict
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -31,6 +32,16 @@ class Actor:
     refreshJwt  = None
     handle      = None
     jwt         = None
+
+    # preferences
+    preferences = None
+    feeds       = None
+
+    # authored
+    authored_feeds = None
+
+    # lists
+    lists       = None
 
     #recent
     last_uri    = None
@@ -423,7 +434,41 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    def get_preferences(self, **kwargs):
+    def feed_preferences(self, **kwargs):
+        """
+           Extracts feed preferences from the preferences.
+        :param kwargs:
+        :return:
+        """
+        preference_type = 'app.bsky.actor.defs#savedFeedsPrefV2'
+        preferences_list = self._get_preferences()
+        self.feeds = next((item for item in preferences_list if item['$type'] == preference_type), None)['items']
+        return self.feeds
+
+    # def timeline(self, **kwargs):
+    #     """ Right now the only default timeline is 'following'
+    #     """
+    #     timeline_posts = []
+    #     still_some = True
+    #     cursor = None
+    #     while still_some:
+    #         response = requests.get(
+    #             url=self.pds_url + '/xrpc/app.bsky.feed.getTimeline',
+    #             params={
+    #                 'algorithm': None,
+    #                 'limit': 50,
+    #                 'cursor': cursor}
+    #         )
+    #         response.raise_for_status()
+    #         res = response.json()
+    #         timeline_posts.extend(res['followers'])
+    #         if 'cursor' in res:
+    #             cursor = res['cursor']
+    #         else:
+    #             still_some = False
+    #     return timeline_posts
+
+    def _get_preferences(self, **kwargs):
         """
         Retrieves the current account's preferences from the Private Data Server.
         Returns:
@@ -435,9 +480,10 @@ class Actor:
             url=self.pds_url + '/xrpc/app.bsky.actor.getPreferences'
         )
         response.raise_for_status()
-        return response.json()
+        self.preferences = response.json()['preferences']
+        return self.preferences
 
-    def put_preferences(self, preferences: dict = None, **kwargs):
+    def _put_preferences(self, preferences: dict = None, **kwargs):
         """
         Updates the current account's preferences on the Private Data Server.
         Args:
@@ -453,6 +499,10 @@ class Actor:
         )
         # The only thing this endpoint returns are codes. Nothing to return.
         response.raise_for_status()
+
+    def get_lists(self, actor: str = None, **kwargs):
+        self.lists = self.records(collection='app.bsky.graph.list')
+        return self.lists
 
     def mute(self, mute_actor: str = None, **kwargs):
         """
@@ -510,6 +560,193 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
+    def create_list(self, list_name: str = None,
+                    description: str = None,
+                    purpose: str = None, **kwargs):
+        """
+
+        :param list_name:
+        :param description:
+        :param purpose:
+            "app.bsky.graph.defs#modlist",
+            "app.bsky.graph.defs#curatelist",
+            "app.bsky.graph.defs#referencelist"
+        :param kwargs:
+        :return:
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        create_list_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.list',
+            'record':
+                {
+                    '$type':    'app.bsky.graph.list',
+                    'purpose': purpose if purpose else 'app.bsky.graph.defs#curatelist',
+                    'name':     list_name,
+                    'description': description,
+                    'createdAt': now
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
+            json=create_list_data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def list_members(self, uri: str = None, **kwargs):
+        members = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.records_url,
+                params={
+                    'list': uri,
+                    'limit': 100,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            members.extend(res['items'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+
+        return members
+
+    def delete_list(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        # Prepare to post
+        list_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.list',
+            'rkey': record_key
+        }
+
+        response = self.session.post(
+            url=self.delete_url,
+            json=list_data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def add_to_list(self, actor: str, list_uri: str, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        list_add_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.listitem',
+            'record':
+                {
+                    '$type': 'app.bsky.graph.listitem',
+                    'createdAt': now,
+                    'subject': actor,
+                    'list': list_uri
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
+            json=list_add_data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def remove_from_list(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        # Prepare to post
+        post_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.listitem',
+            'rkey': record_key
+        }
+        response = self.session.post(
+            url=self.delete_url,
+            json=post_data
+        )
+        response.raise_for_status()
+
+        return response.json()
+
+    def list_feed(self, list_uri: str = None, **kwargs):
+        """
+        """
+        list_feed = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
+                params={
+                    'list': list_uri,
+                    'limit': 100,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            list_feed.extend(res['items'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+
+        return list_feed
+
+    def block_list(self, block_list: str = None, **kwargs):
+        """
+        Blocks the specified list.
+
+        Args:
+            block_list (str, optional): The list to block. Defaults to None.
+
+        Returns:
+            dict: The response from the server, containing the created block record.
+
+        Raises:
+            Exception: If the block operation fails.
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        block_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.graph.listblock',
+            'record':
+                {
+                    '$type': 'app.bsky.graph.listblock',
+                    'createdAt': now,
+                    'subject': block_list
+                }
+        }
+
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
+            json=block_data  # {'actor': block_actor if block_actor else self.actor},
+        )
+        response.raise_for_status()
+        return response.json()
+
     def block(self, block_actor: str = None, **kwargs):
         """
         Blocks the specified actor.
@@ -560,9 +797,8 @@ class Actor:
             'rkey': record_key
         }
 
-        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
         response = self.session.post(
-            url=url_to_del,
+            url=self.delete_url,
             json=post_data
         )
         response.raise_for_status()
@@ -620,9 +856,8 @@ class Actor:
             'rkey': record_key
         }
 
-        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
         response = self.session.post(
-            url=url_to_del,
+            url=self.delete_url,
             json=unfollow_data
         )
         response.raise_for_status()
@@ -678,7 +913,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    def allow(self, uri: str = None, rules: list = None, **kwargs):
+    def restrict(self, uri: str = None, rules: list = None, **kwargs):
         """
         Set the rules of interaction with a thread. List of up to 5 rules.
         The possible rules are:
@@ -751,7 +986,28 @@ if __name__ == "__main__":
     #     'until': '2024-12-10T21:44:46Z',
     #     'limit': 100
     # }
-    # my_actor = Actor(bluesky_handle='alxfed.bsky.social') # the .env file is loaded by PyCharm from elsewhere.
+    my_actor = Actor() # bluesky_handle='alxfed.bsky.social')
+    res = my_actor.records(collection='app.bsky.graph.list')
+    some_list = 'https://bsky.app/profile/eugeneyan.com/lists/3lbxx6amyfk2j'
+
+    created_list = my_actor.create_list(
+        list_name='Test List',
+        description='Automated creation of a list.',
+    )
+    list_uri = created_list['uri']
+    record_of_addition =my_actor.add_to_list(actor=test_actor, list_uri=list_uri)
+    my_actor.remove_from_list(uri=record_of_addition['uri'])
+    result = my_actor.delete_list(uri=list_uri)
+    # my_actor.add_to_list(actor='reasoning-machine.bsky.social', list_uri=list_uri)
+
+    # res = my_actor.block_list()
+    # feeds = my_actor.timeline()
+    # {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
+
+    ...
+
+    # diction = {item if item['$type'] in typosos else None for item in listos}
+    ...
     # post = my_actor.post(text='This is a post with limited access')
     # EXAMPLE_LIST_URI = 'at://did:plc:yjvzk3c3uanrlrsdm4uezjqi/app.bsky.graph.list/3lcxml5gmf32s'
     # rules = [
@@ -759,7 +1015,21 @@ if __name__ == "__main__":
     #     {'$type': 'app.bsky.feed.threadgate#followingRule'},
     #     {'$type': 'app.bsky.feed.threadgate#listRule', 'list': EXAMPLE_LIST_URI}
     # ]  # Nobody can interact with the post is an empty list - '[]'
-
+    """{'preferences':[
+    {'$type': 'app.bsky.actor.defs#savedFeedsPref', 'pinned': ['at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky'], 
+    'saved': ['at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/bsky-team', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/hot-classic', 'at://did:plc:tenurhgjptubkk5zf5qhi3og/app.bsky.feed.generator/mutuals', 'at://did:plc:tenurhgjptubkk5zf5qhi3og/app.bsky.feed.generator/catch-up', 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'at://did:plc:mzbt67ojwwerred6cl63tovy/app.bsky.feed.generator/aaaggd6qkteau', 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky']},
+    
+    {'$type': 'app.bsky.actor.defs#savedFeedsPrefV2', 'items': [
+    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'pinned': True, 'id': '3kuxtwubbzc2x'}, 
+    {'type': 'timeline', 'value': 'following', 'pinned': True, 'id': '3kuxtwubcyk2x'}, 
+    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'pinned': True, 'id': '3lbq7vseyps2m'}, 
+    {'type': 'feed', 'value': 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'pinned': True, 'id': '3lbuvklomjc2t'}, 
+    {'type': 'feed', 'value': 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky', 'pinned': True, 'id': '3lc2girn66s2a'}, 
+    {'type': 'feed', 'value': 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'pinned': False, 'id': '3lbrlg3nuf22l'}, 
+    {'type': 'feed', 'value': 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'pinned': False, 'id': '3lbrmsbjfe22t'}, 
+    {'type': 'feed', 'value': 'at://did:plc:mzbt67ojwwerred6cl63tovy/app.bsky.feed.generator/aaaggd6qkteau', 'pinned': False, 'id': '3lbrhvzysjc2a'}, 
+    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/bsky-team', 'pinned': False, 'id': '3lbqfsayodc2n'}]}
+    """
     # result = my_actor.allowed(uri=post['uri'], rules=rules)
     # posts = my_actor.search_posts(query)
     # records = my_actor.records(collection='app.bsky.feed.post')
@@ -771,7 +1041,7 @@ if __name__ == "__main__":
     #     posts_content.append(content)
     # for record in records['records']:
     #     my_actor.unrestrict(uri=record['uri'])
-    # description = my_actor.describe()
+    description = my_actor.describe()
     # followed = my_actor.follow(follow_actor=test_actor)
     # unfollowed = my_actor.unfollow(uri=followed['uri'])
     # post = my_actor.post(text='This is a post')
