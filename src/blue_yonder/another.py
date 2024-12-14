@@ -39,6 +39,7 @@ class Another():
     """
 
     VIEW_API        = 'https://public.api.bsky.app'
+    records_url     = 'https://bsky.social/xrpc/com.atproto.repo.listRecords'
     associated      = None
     did             = None
     handle          = None
@@ -51,6 +52,8 @@ class Another():
     followsCount    = None
     postsCount      = None
     pinnedPost      = None
+    # lists and packs
+    lists           = None
 
     def __init__(self, actor: str = None, **kwargs):
         """
@@ -78,6 +81,65 @@ class Another():
         response.raise_for_status()
         res = response.json()
         return res
+
+    def _records(self, actor: str = None, collection: str = None, **kwargs):
+        """
+        A general function for getting records of a given collection.
+        Defaults to own repo.
+        """
+        records = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url=self.records_url,
+                params={
+                    'repo': actor if actor else self.did,
+                    'collection': collection,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            records.extend(res['records'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+
+        return records
+
+    def get_lists(self, actor: str = None, **kwargs):
+        self.lists = self._records(actor=actor, collection='app.bsky.graph.list')
+        return self.lists
+
+    def read_list(self, uri: str = None, **kwargs):
+        """
+
+        :param uri:
+        :param kwargs:
+        :return:
+        """
+        members = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = requests.get(
+                url='https://public.api.bsky.app/xrpc/app.bsky.graph.getList',
+                params={
+                    'list': uri,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            members.extend(res['items'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+
+        return members
 
     def follows(self, actor: str = None, **kwargs):
         """
@@ -144,19 +206,6 @@ class Another():
         res = response.json()
         return res
 
-    def lists(self, actor: str = None, **kwargs):
-        """
-        """
-        if not actor:
-            actor = self.did if self.did else self.handle
-        response = requests.get(
-            url=self.VIEW_API + '/xrpc/app.bsky.graph.getLists',
-            params={'actor': actor}
-        )
-        response.raise_for_status()
-        res = response.json()
-        return res
-
     def authored(self, filter: list = None, **kwargs):
         """
         """
@@ -185,17 +234,17 @@ class Another():
 if __name__ == '__main__':
     """ Quick tests
     """
-    alex = Another(actor='did:plc:x7lte36djjyhereki5avyst7')
+    alex = Another(actor='did:plc:z72i7hdynmk6r22z27h6tvur')
     # feed_id = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
-    select = [
-        'posts_with_replies',
-        'posts_no_replies',
-        'posts_with_media',
-        'posts_and_author_threads'
-    ]
-    feed = alex.authored(filter=select)
-    lists = alex.lists()
-    feeds = alex.created_feeds()
-    followers = alex.followers()
-    follows = alex.follows()
+    # select = [
+    #     'posts_with_replies',
+    #     'posts_no_replies',
+    #     'posts_with_media',
+    #     'posts_and_author_threads'
+    # ]
+    # feed = alex.authored(filter=select)
+
+    # feeds = alex.created_feeds()
+    # followers = alex.followers()
+    # follows = alex.follows()
     ...

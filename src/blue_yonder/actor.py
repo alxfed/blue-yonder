@@ -506,7 +506,7 @@ class Actor:
         response.raise_for_status()
 
     def get_lists(self, actor: str = None, **kwargs):
-        self.lists = self.records(collection='app.bsky.graph.list')
+        self.lists = self.records(actor=actor, collection='app.bsky.graph.list')
         return self.lists
 
     def mute(self, mute_actor: str = None, **kwargs):
@@ -992,6 +992,7 @@ if __name__ == "__main__":
     #     'limit': 100
     # }
     my_actor = Actor() # bluesky_handle='alxfed.bsky.social')
+    lists = my_actor.get_lists(actor='did:plc:3hegwi7apvelaxlnp3pzdvgq')
     res = my_actor.records(collection='app.bsky.graph.list')
     some_list = 'https://bsky.app/profile/eugeneyan.com/lists/3lbxx6amyfk2j'
 
