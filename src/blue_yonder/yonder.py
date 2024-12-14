@@ -29,18 +29,24 @@ def get_profiles(actors: list):
         raise Exception('Too many actors.')
 
 
-def feed(feed: dict = None, **kwargs):
+def feed(feed: dict = None, cursor: str = None, **kwargs):
     """
+    feedContext:
+        t-nature
+        t-science
+        t-tv
+        t-music
+        nettop
     """
     if not feed:
         feed = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed',
-                'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
+                'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}  # default feed
     response = requests.get(
         url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
         params={
             'feed': feed['value'],
             'limit': 50,
-            'cursor': None
+            'cursor': cursor
         }
     )
     response.raise_for_status()
@@ -49,8 +55,7 @@ def feed(feed: dict = None, **kwargs):
 
 
 def search_actors(query: dict):
-    """
-    Search for actors. Parameters:
+    """ Search for actors. Parameters:
 
         q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
 
@@ -186,4 +191,22 @@ if __name__ == '__main__':
     }
     # found_posts = search_100_posts(query)
     feed = feed()
+    # returns
+    list_of_dictionaries   = feed['feed']
+    cursor                 = feed['cursor']  # str
+    # Every post dictionary consists of
+    feedContext = list_of_dictionaries[0]['feedContext']
+    post        = list_of_dictionaries[0]['post']
+    # Every post dictionary contains:
+    uri   = post['uri']
+    cid   = post['cid']
+    author  = post['author']
+    record  = post['record']
+    # Record consists of
+    text    = record['text']
+    # other fields of a post...
+    embed   = post['embed']
+    labels  = post['labels']
+    threadgate = post['threadgate']
+    # 'createdAt': '2024-11-05T21:44:46Z'
     ...

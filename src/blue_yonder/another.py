@@ -77,8 +77,6 @@ class Another():
         )
         response.raise_for_status()
         res = response.json()
-        for key, value in res.items():
-            setattr(self, key, value)
         return res
 
     def follows(self, actor: str = None, **kwargs):

@@ -358,6 +358,7 @@ class Actor:
 
     def post_image(self, text: str = None,
                    blob: dict = None,   # the blob of uploaded image
+                   aspect_ratio: dict = None, # {'height':620,'width':620}
                    alt_text: str = '', **kwargs):
         """
         """
@@ -373,7 +374,11 @@ class Actor:
                 'embed': {
                     '$type': 'app.bsky.embed.images',
                     'images': [
-                        {'alt': alt_text,'image': blob}
+                        {
+                            'alt': alt_text,
+                            'aspectRatio': aspect_ratio if aspect_ratio else {'height':620,'width':620},
+                            'image': blob
+                        }
                     ]
                 }
             }
