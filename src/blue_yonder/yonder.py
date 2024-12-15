@@ -54,6 +54,30 @@ def feed(feed: dict = None, cursor: str = None, **kwargs):
     return res
 
 
+def list_feed(list: dict = None, cursor: str = None, **kwargs):
+    """
+    feedContext:
+        t-nature
+        t-science
+        t-tv
+        t-music
+        nettop
+    """
+    if not list:
+        raise RuntimeError('No list specified.')
+    response = requests.get(
+        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
+        params={
+            'list': list['uri'],
+            'limit': 50,
+            'cursor': cursor
+        }
+    )
+    response.raise_for_status()
+    res = response.json()
+    return res
+
+
 def search_actors(query: dict):
     """ Search for actors. Parameters:
 

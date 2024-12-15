@@ -7,7 +7,11 @@ LICENSE file in the root directory of this source tree.
 """
 from .actor import Actor
 from .another import Another
-from .yonder import search_posts
+from .yonder import (search_100_posts,
+                     search_actors,
+                     feed,
+                     list_feed)
+from .utilities import read_long_list
 
 Butterfly   = Actor     # playful
 Flower      = Another   # aliases
@@ -17,5 +21,6 @@ __all__ = [
     'Butterfly',
     'Another',
     'Flower',
-    'search_posts'
+    'search_100_posts',
+    'read_long_list'
 ]

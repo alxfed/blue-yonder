@@ -10,6 +10,7 @@ from os import environ
 from time import sleep
 import requests
 from collections import defaultdict
+from blue_yonder.utilities import read_long_list
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -27,6 +28,7 @@ class Actor:
     upload_url  = None
     update_url  = None
     delete_url  = None
+    list_url   = None
     did         = None
     accessJwt   = None
     refreshJwt  = None
@@ -64,6 +66,7 @@ class Actor:
         self.post_url       = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
         self.delete_url     = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
         self.update_url     = self.pds_url + '/xrpc/com.atproto.repo.putRecord'
+        self.list_url = self.pds_url + '/xrpc/app.bsky.graph.getList'
         self.jwt            = kwargs.get('jwt', None)
 
         # Start configuring a blank Session
@@ -602,24 +605,19 @@ class Actor:
         return response.json()
 
     def list_members(self, uri: str = None, **kwargs):
-        members = []
-        still_some = True
-        cursor = None
-        while still_some:
-            response = requests.get(
-                url=self.records_url,
+        def fetch_members(cursor: str = None, **kwargs):
+            response = self.session.get(
+                url=self.list_url,
                 params={
                     'list': uri,
                     'limit': 100,
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            members.extend(res['items'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
+        members = read_long_list(
+            fetcher=fetch_members,
+            parameter='items')
 
         return members
 
@@ -698,11 +696,26 @@ class Actor:
     def list_feed(self, list_uri: str = None, **kwargs):
         """
         """
-        list_feed = []
-        still_some = True
-        cursor = None
-        while still_some:
-            response = requests.get(
+        # list_feed = []
+        # still_some = True
+        # cursor = None
+        # while still_some:
+        #     response = self.session.get(
+        #         url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
+        #         params={
+        #             'list': list_uri,
+        #             'limit': 100,
+        #             'cursor': cursor}
+        #     )
+        #     response.raise_for_status()
+        #     res = response.json()
+        #     list_feed.extend(res['items'])
+        #     if 'cursor' in res:
+        #         cursor = res['cursor']
+        #     else:
+        #         still_some = False
+        def fetch_feed_posts(cursor: str = None, **kwargs):
+            response = self.session.get(
                 url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
                 params={
                     'list': list_uri,
@@ -710,12 +723,11 @@ class Actor:
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            list_feed.extend(res['items'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
+
+        list_feed = read_long_list(
+            fetcher=fetch_feed_posts,
+            parameter='feed')
 
         return list_feed
 
@@ -991,10 +1003,13 @@ if __name__ == "__main__":
     #     'until': '2024-12-10T21:44:46Z',
     #     'limit': 100
     # }
-    my_actor = Actor() # bluesky_handle='alxfed.bsky.social')
-    lists = my_actor.get_lists(actor='did:plc:3hegwi7apvelaxlnp3pzdvgq')
+    my_actor = Actor(bluesky_handle='alxfed.bsky.social')
+
+    lists = my_actor.get_lists()
+    # list_uri ='at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.graph.list/3ldckd6tqsk2j'
+    # members = my_actor.list_members(uri=list_uri)
+    # list_feed = my_actor.list_feed(list_uri=list_uri)
     res = my_actor.records(collection='app.bsky.graph.list')
-    some_list = 'https://bsky.app/profile/eugeneyan.com/lists/3lbxx6amyfk2j'
 
     created_list = my_actor.create_list(
         list_name='Test List',
