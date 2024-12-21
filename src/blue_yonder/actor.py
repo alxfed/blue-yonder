@@ -91,7 +91,9 @@ class Actor:
             self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
             try:
                 self.mute()
-                self.unmute()
+                rate_limits = read_rate_limits( self.unmute())
+                for key, value in rate_limits.items():
+                    setattr(self, key, value)
             except Exception:
                 self._get_token()
         else:
@@ -530,6 +532,7 @@ class Actor:
             json={'actor': unmute_actor if unmute_actor else self.test_actor},
         )
         response.raise_for_status()
+        return response
 
     def records(self, actor: str = None, collection: str = None, **kwargs):
         """
