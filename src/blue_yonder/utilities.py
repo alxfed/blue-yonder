@@ -5,6 +5,7 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
+import time
 
 
 def read_long_list(fetcher, parameter):
@@ -29,16 +30,30 @@ def read_long_list(fetcher, parameter):
     return long_list
 
 
+def read_rate_limits(response):
+    rh = response.headers
+    rlp, rlpw = rh['RateLimit-Policy'].split(';')
+    rlpw = rlpw.split('=')[-1]
+    rate_limits = {
+        'RateLimit': int(rh['RateLimit-Limit']),
+        'RateLimitRemaining': int(rh['RateLimit-Remaining']),
+        'RateLimitReset':int(rh['RateLimit-Reset']),
+        'RateLimitPolicy':int(rlp),
+        'RateLimitPolicyW':int(rlpw)
+    }
+    return rate_limits
+
+
+def sleep_if_less_than(rate_limit_reset, less_than=10):
+    current_time = time.time()  # Gets current Unix timestamp
+    sleep_duration = rate_limit_reset - current_time
+
+    # Only sleep if the reset time is in the future
+    if sleep_duration > 0:
+        time.sleep(sleep_duration)
+    else:
+        print("Reset time has already passed")
+
+
 if __name__ == '__main__':
-    def req(cursor=None):
-        response = requests.get(
-            url=self.records_url,
-            params={
-                'repo': actor if actor else self.did,
-                'collection': collection,
-                'limit': 50,
-                'cursor': cursor}
-        )
-        response.raise_for_status()
-        res = response.json()
-        records.extend(res['records'])
+    pass

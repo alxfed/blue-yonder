@@ -11,7 +11,7 @@ from .yonder import (search_100_posts,
                      search_actors,
                      feed,
                      list_feed)
-from .utilities import read_long_list
+from .utilities import read_long_list, read_rate_limits
 
 Butterfly   = Actor     # playful
 Flower      = Another   # aliases
@@ -22,5 +22,6 @@ __all__ = [
     'Another',
     'Flower',
     'search_100_posts',
-    'read_long_list'
+    'read_long_list',
+    'read_rate_limits',
 ]

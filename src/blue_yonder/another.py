@@ -5,12 +5,8 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
-from datetime import datetime, timezone
-from os import environ
-from time import sleep
+from datetime import datetime
 import requests
-from json import dumps, loads
-# from .client import Client
 
 
 class Another():
@@ -125,7 +121,7 @@ class Another():
         cursor = None
         while still_some:
             response = requests.get(
-                url='https://public.api.bsky.app/xrpc/app.bsky.graph.getList',
+                url=self.VIEW_API + '/xrpc/app.bsky.graph.getList',
                 params={
                     'list': uri,
                     'limit': 50,

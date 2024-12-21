@@ -6,11 +6,11 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime, timezone
+from time import sleep, time
 from os import environ
-from time import sleep
 import requests
 from collections import defaultdict
-from blue_yonder.utilities import read_long_list
+from blue_yonder.utilities import read_long_list, read_rate_limits
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -51,6 +51,13 @@ class Actor:
     last_rev    = None
     last_blob   = None
 
+    # limits
+    RateLimit           = None
+    RateLimitRemaining  = None
+    RateLimitReset      = None
+    RateLimitPolicy     = None
+    RateLimitPolicyW    = None
+
     def __init__(self, **kwargs):
         """
             Create an Actor
@@ -68,6 +75,10 @@ class Actor:
         self.update_url     = self.pds_url + '/xrpc/com.atproto.repo.putRecord'
         self.list_url = self.pds_url + '/xrpc/app.bsky.graph.getList'
         self.jwt            = kwargs.get('jwt', None)
+
+        # Rate limits
+        self.RateLimit          = 30
+        self.RateLimitReset     = int(time())
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
@@ -92,15 +103,27 @@ class Actor:
         Initiate a session, get a JWT, ingest all the parameters
         :return:
         """
+
         session_url = self.pds_url + '/xrpc/com.atproto.server.createSession'
         session_data = {'identifier': self.handle, 'password': self.password}
 
         # Requesting permission to fly in the wild blue yonder.
         try:
+            if self.RateLimitRemaining == 0 and self.RateLimitReset > int(datetime.now(timezone.utc).timestamp()):
+                raise RuntimeError(f'Rate limit exhausted until {datetime.fromtimestamp(self.RateLimitReset)}')
+
+            # Requesting permission to fly in the wild blue yonder.
             response = self.session.post(
                 url=session_url,
                 json=session_data)
+
+            # update rate limits
+            rate_limits = read_rate_limits(response)
+            for key, value in rate_limits.items():
+                setattr(self, key, value)
+
             response.raise_for_status()
+
             try:
                 # Get the handle and access / refresh JWT
                 self.jwt = response.json()
@@ -109,7 +132,7 @@ class Actor:
                 # Adjust the Session. Install the cookie into the Session.
                 self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
             except Exception as e:
-                raise RuntimeError(f'Huston did not give us a JWT:  {e}')
+                raise RuntimeError(f'Huston did not give you a JWT:  {e}')
 
         except Exception as e:
             raise RuntimeError(f'Huston does not identify you as a human, you are a UFO:  {e}')
@@ -403,7 +426,7 @@ class Actor:
 
         return res
 
-    def last_posts(self, repo: str = None, **kwargs):
+    def last_100_posts(self, repo: str = None, **kwargs):
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
             params={
@@ -452,29 +475,6 @@ class Actor:
         preferences_list = self._get_preferences()
         self.feeds = next((item for item in preferences_list if item['$type'] == preference_type), None)['items']
         return self.feeds
-
-    # def timeline(self, **kwargs):
-    #     """ Right now the only default timeline is 'following'
-    #     """
-    #     timeline_posts = []
-    #     still_some = True
-    #     cursor = None
-    #     while still_some:
-    #         response = requests.get(
-    #             url=self.pds_url + '/xrpc/app.bsky.feed.getTimeline',
-    #             params={
-    #                 'algorithm': None,
-    #                 'limit': 50,
-    #                 'cursor': cursor}
-    #         )
-    #         response.raise_for_status()
-    #         res = response.json()
-    #         timeline_posts.extend(res['followers'])
-    #         if 'cursor' in res:
-    #             cursor = res['cursor']
-    #         else:
-    #             still_some = False
-    #     return timeline_posts
 
     def _get_preferences(self, **kwargs):
         """
@@ -536,10 +536,7 @@ class Actor:
         A general function for getting records of a given collection.
         Defaults to own repo.
         """
-        records = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_records(cursor: str = None, **kwargs):
             response = requests.get(
                 url=self.records_url,
                 params={
@@ -549,13 +546,12 @@ class Actor:
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            records.extend(res['records'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
 
+        records = read_long_list(
+            fetcher=fetch_records,
+            parameter='records'
+        )
         return records
 
     def describe(self, actor: str = None, **kwargs):
@@ -615,6 +611,7 @@ class Actor:
             )
             response.raise_for_status()
             return response.json()
+
         members = read_long_list(
             fetcher=fetch_members,
             parameter='items')
@@ -696,24 +693,6 @@ class Actor:
     def list_feed(self, list_uri: str = None, **kwargs):
         """
         """
-        # list_feed = []
-        # still_some = True
-        # cursor = None
-        # while still_some:
-        #     response = self.session.get(
-        #         url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
-        #         params={
-        #             'list': list_uri,
-        #             'limit': 100,
-        #             'cursor': cursor}
-        #     )
-        #     response.raise_for_status()
-        #     res = response.json()
-        #     list_feed.extend(res['items'])
-        #     if 'cursor' in res:
-        #         cursor = res['cursor']
-        #     else:
-        #         still_some = False
         def fetch_feed_posts(cursor: str = None, **kwargs):
             response = self.session.get(
                 url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
@@ -881,9 +860,9 @@ class Actor:
 
         return response.json()
 
-    def search_posts(self, query: dict):
+    def search_100_posts(self, query: dict):
         """
-        Search for the first not more than100 posts (because the paginated search is prohibited by Bluesky).
+        Search for the first not more than 100 posts (because the paginated search is prohibited by Bluesky).
 
         Search for posts. Parameters of the query:
 
