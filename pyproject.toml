@@ -3,7 +3,7 @@ requires = ["setuptools>=75.6.0"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "blue-yonder"
-version = "0.0.27"
+version = "0.0.28"
 authors = [
     {name="Alexander Fedotov", email="alex.fedotov@aol.com"},
 ]

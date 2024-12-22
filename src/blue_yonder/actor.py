@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from time import sleep, time
 from os import environ
 import requests
-from blue_yonder.utilities import _read_rate_limits
+from functools import wraps
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -139,6 +139,25 @@ class Actor:
         else:
             raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
+    @staticmethod
+    def check_rate_limit(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            until_refresh = self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())
+            if until_refresh < 0:
+                return func(self, *args, **kwargs)
+            elif self.RateLimitRemaining > 0:
+                return func(self, *args, **kwargs)
+            elif self.RateLimitRemaining == 0:
+                if until_refresh < 10:
+                    sleep(until_refresh)
+                    return func(self, *args, **kwargs)
+                else:
+                    raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+            else:
+                raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        return wrapper
+
     def _rate_limited(self, wait: int = 10, **kwargs):
         """ Check the rate limits before making a request.
         """
@@ -166,6 +185,7 @@ class Actor:
         self.RateLimitPolicy    = int(rlp)
         self.RateLimitPolicyW   = int(rlpw)
 
+    @check_rate_limit
     def post(self, text: str = None, **kwargs):
         """
             Post.
@@ -184,23 +204,22 @@ class Actor:
                     'createdAt': now
                 }
         }
-        if not self._rate_limited():
-            try:
-                response = self.session.post(url=self.post_url, json=post_data)
-                self._update_limits(response)
+        try:
+            response = self.session.post(url=self.post_url, json=post_data)
+            # read the returned limits left.
+            self._update_limits(response)
 
-                response.raise_for_status()
-                res = response.json()
-                self.last_uri = res['uri']
-                self.last_cid = res['cid']
-                self.last_rev = res['commit']['rev']
+            response.raise_for_status()
+            res = response.json()
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
 
-            except Exception as e:
-                raise Exception(f"Error, with talking to Huston:  {e}")
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        except Exception as e:
+            raise Exception(f"Error, with talking to Bluesky API:  {e}")
+        return res
 
+    @check_rate_limit
     def reply(self, root_post: dict, post: dict, text: str):
         """
         """
@@ -225,35 +244,34 @@ class Actor:
                 }
             }
         }
-        if not self._rate_limited():
-            try:
-                response = self.session.post(
-                    url=self.post_url,
-                    json=reply_data)
-                self._update_limits(response)
 
-                response.raise_for_status()
-                res = response.json()
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=reply_data)
+            self._update_limits(response)
 
-                # Get the handle and access / refresh JWT
-                self.last_uri = res['uri']
-                self.last_cid = res['cid']
-                self.last_rev = res['commit']['rev']
+            response.raise_for_status()
+            res = response.json()
 
-            except Exception as e:
-                raise Exception(f"Error, with talking to Huston:  {e}")
+            # Get the handle and access / refresh JWT
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
 
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        except Exception as e:
+            raise Exception(f"Error, with talking to Huston:  {e}")
 
+        return res
+
+    @check_rate_limit
     def quote_post(self, embed_post: dict, text: str):
         """
         Embed a given post (with 'uri' and 'cid') into a new post.
         embed_post: {'uri': uri, 'cid': cid}
         text: string up to 300 characters
 
-        output: {'uri': uri, 'cid': cid, ...}
+        output: {'uri': uri, 'cid': cid, ...} of a post with embedded post.
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -274,29 +292,26 @@ class Actor:
                     }
                 }
         }
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=quote_data)
+            self._update_limits(response)
 
-        if not self._rate_limited():
-            try:
-                response = self.session.post(
-                    url=self.post_url,
-                    json=quote_data)
-                self._update_limits(response)
+            response.raise_for_status()
+            res = response.json()
 
-                response.raise_for_status()
-                res = response.json()
+            # Get the last post attributes
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
 
-                # Get the last post attributes
-                self.last_uri = res['uri']
-                self.last_cid = res['cid']
-                self.last_rev = res['commit']['rev']
+        except Exception as e:
+            raise Exception(f"Error, with talking to Huston:  {e}")
 
-            except Exception as e:
-                raise Exception(f"Error, with talking to Huston:  {e}")
+        return res
 
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
-
+    @check_rate_limit
     def like(self, uri: str = None, cid: str = None, **kwargs):
         """
         """
@@ -315,22 +330,21 @@ class Actor:
                     }
                 }
         }
-        if not self._rate_limited():
-            try:
-                response = self.session.post(
-                    url=self.post_url,
-                    json=like_data)
 
-                response.raise_for_status()
-                res = response.json()
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=like_data)
 
-            except Exception as e:
-                raise Exception(f"Error, with talking to Huston:  {e}")
+            response.raise_for_status()
+            res = response.json()
 
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        except Exception as e:
+            raise Exception(f"Error, with talking to Huston:  {e}")
 
+        return res
+
+    @check_rate_limit
     def unlike(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -347,19 +361,17 @@ class Actor:
             'collection': 'app.bsky.feed.like',
             'rkey': record_key
         }
-        if not self._rate_limited():
-            response = self.session.post(
-                url=self.delete_url,
-                json=like_data
-            )
-            self._update_limits(response)
+        response = self.session.post(
+            url=self.delete_url,
+            json=like_data
+        )
+        self._update_limits(response)
 
-            response.raise_for_status()
-            res = response.json()
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        response.raise_for_status()
+        res = response.json()
+        return res
 
+    @check_rate_limit
     def delete_post(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -371,22 +383,18 @@ class Actor:
             'collection':   'app.bsky.feed.post',
             'rkey':         record_key
         }
+        try:
+            response = self.session.post(url=self.delete_url, json=post_data)
+            self._update_limits(response)
 
-        # url_to_del = self.delete_url #pds_url + '/xrpc/com.atproto.repo.deleteRecord'
-        if not self._rate_limited():
-            try:
-                response = self.session.post(url=self.delete_url, json=post_data)
-                self._update_limits(response)
+            response.raise_for_status()
+            res = response.json()
 
-                response.raise_for_status()
-                res = response.json()
+        except Exception as e:
+            raise Exception(f"Can not delete the post:  {e}")
+        return res
 
-            except Exception as e:
-                raise Exception(f"Can not delete the post:  {e}")
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
-
+    @check_rate_limit
     def thread(self, posts_texts: list):
         """
             A trill of posts.
@@ -405,6 +413,7 @@ class Actor:
             sleep(1)
             self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
 
+    @check_rate_limit
     def upload_image(self, file_path, **kwargs):
         """
         """
@@ -420,24 +429,22 @@ class Actor:
             'Content-Type': mime_type,
             'Authorization': 'Bearer ' + self.jwt['accessJwt']
         }
-        upload_url = self.upload_url
         self.session.headers.update({'Content-Type': mime_type})
-
-        if not self._rate_limited():
-            response = self.session.post(
+        response = self.session.post(
             url=self.upload_url,
-            # headers=headers,
-            data=img_bytes)
+            data=img_bytes
+        )
+        self._update_limits(response)
 
-            response.raise_for_status()
-            res = response.json()
-            self.last_blob = res['blob']
-            # restore the default content type.
-            self.session.headers.update({'Content-Type': 'application/json'})
-            return self.last_blob
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        response.raise_for_status()
+        res = response.json()
+        self.last_blob = res['blob']
+        # restore the default content type.
+        self.session.headers.update({'Content-Type': 'application/json'})
 
+        return self.last_blob
+
+    @check_rate_limit
     def post_image(self, text: str = None,
                    blob: dict = None,   # the blob of uploaded image
                    aspect_ratio: dict = None, # {'height':620,'width':620}
@@ -465,25 +472,24 @@ class Actor:
                 }
             }
         }
-        if not self._rate_limited():
-            try:
-                response = self.session.post(
-                    url=self.post_url,
-                    json=image_data)
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=image_data)
+            # read the returned limits left.
+            self._update_limits(response)
 
-                response.raise_for_status()
-                res = response.json()
+            response.raise_for_status()
+            res = response.json()
 
-                # Get the last post attributes
-                self.last_uri = res['uri']
-                self.last_cid = res['cid']
-                self.last_rev = res['commit']['rev']
-            except Exception as e:
-                raise Exception(f"Error, posting an image:  {e}")
+            # Update the last post attributes
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
+        except Exception as e:
+            raise Exception(f"Error, posting an image:  {e}")
 
-            return res
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        return res
 
     def last_100_posts(self, repo: str = None, **kwargs):
         """
@@ -492,19 +498,20 @@ class Actor:
         :param kwargs:
         :return:
         """
-        if not self._rate_limited():
-            response = self.session.get(
-                url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
-                params={
-                    'repo': repo if repo else self.did,  # self if not given.
-                    'limit': 100,
-                    'reverse': False  # Last post first in the list
-                }
-            )
-            response.raise_for_status()
-            return response.json()
-        else:
-            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
+            params={
+                'repo': repo if repo else self.did,  # self if not given.
+                'limit': 100,
+                'reverse': False  # Last post first in the list
+            }
+        )
+        # read the returned limits left.
+        self._update_limits(response)
+
+        response.raise_for_status()
+
+        return response.json()
 
     def read_post(self, uri: str, repo: str = None, **kwargs):
         """
@@ -580,6 +587,7 @@ class Actor:
         self.lists = self._records(actor=actor, collection='app.bsky.graph.list')
         return self.lists
 
+    @check_rate_limit
     def mute(self, mute_actor: str = None, **kwargs):
         """
         Mutes the specified actor.
@@ -588,8 +596,11 @@ class Actor:
             url=self.pds_url + '/xrpc/app.bsky.graph.muteActor',
             json={'actor': mute_actor if mute_actor else self.test_actor},  # mute_data
         )
+        self._update_limits(response)
+        # doesn't return anything besides the code
         response.raise_for_status()
 
+    @check_rate_limit
     def unmute(self, unmute_actor: str = None, **kwargs):
         """ Unmutes the specified actor.
         """
@@ -597,10 +608,12 @@ class Actor:
             url=self.pds_url + '/xrpc/app.bsky.graph.unmuteActor',
             json={'actor': unmute_actor if unmute_actor else self.test_actor},
         )
-        response.raise_for_status()
-        return response
+        self._update_limits(response)
 
-    def _read_long_list(self, fetcher, parameter, **kwargs):
+        response.raise_for_status()
+        return response  # this is for the __init__ check of JWT
+
+    def _read_long_list(self, fetcher, parameter, max_results: int = 1000, **kwargs):
         """ Iterative requests with queries
 
         :param requestor: function that makes queries
@@ -616,6 +629,8 @@ class Actor:
                 except Exception as e:
                     raise Exception(f"Error in reading paginated list,  {e}")
                 long_list.extend(response[parameter])
+                if len(long_list) >= max_results:
+                    break
                 cursor = response.get('cursor', None)
                 if not cursor:
                     break
@@ -657,6 +672,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def create_list(self, list_name: str = None,
                     description: str = None,
                     purpose: str = None, **kwargs):
@@ -690,6 +706,8 @@ class Actor:
             url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
             json=create_list_data
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
@@ -711,6 +729,7 @@ class Actor:
 
         return members
 
+    @check_rate_limit
     def delete_list(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -732,9 +751,12 @@ class Actor:
             url=self.delete_url,
             json=list_data
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def add_to_list(self, actor: str, list_uri: str, **kwargs):
         """
         """
@@ -751,14 +773,16 @@ class Actor:
                     'list': list_uri
                 }
         }
-
         response = self.session.post(
             url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
             json=list_add_data
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def remove_from_list(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -779,6 +803,8 @@ class Actor:
             url=self.delete_url,
             json=post_data
         )
+        self._update_limits(response)
+
         response.raise_for_status()
 
         return response.json()
@@ -794,6 +820,8 @@ class Actor:
                     'limit': 100,
                     'cursor': cursor}
             )
+            self._update_limits(response)
+
             response.raise_for_status()
             return response.json()
 
@@ -803,6 +831,7 @@ class Actor:
 
         return list_feed
 
+    @check_rate_limit
     def block_list(self, block_list: str = None, **kwargs):
         """
         Blocks the specified list.
@@ -833,9 +862,11 @@ class Actor:
             url=self.pds_url + '/xrpc/com.atproto.repo.createRecord',
             json=block_data  # {'actor': block_actor if block_actor else self.actor},
         )
+        self._update_limits(response)
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def block(self, block_actor: str = None, **kwargs):
         """
         Blocks the specified actor.
@@ -861,14 +892,16 @@ class Actor:
                     'subject': block_actor
                 }
         }
-
         response = self.session.post(
             url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
             json=block_data  # {'actor': block_actor if block_actor else self.actor},
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def unblock(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -890,10 +923,12 @@ class Actor:
             url=self.delete_url,
             json=post_data
         )
+        self._update_limits(response)
         response.raise_for_status()
 
         return response.json()
 
+    @check_rate_limit
     def follow(self, follow_actor: str = None, **kwargs):
         """
         Follows the specified actor.
@@ -924,9 +959,12 @@ class Actor:
             url=self.pds_url +'/xrpc/com.atproto.repo.createRecord',
             json=follow_data  # {'actor': block_actor if block_actor else self.actor},
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def unfollow(self, uri: str = None, record_key: str = None, **kwargs):
         """
         Unfollows the actor specified in the record.
@@ -949,10 +987,13 @@ class Actor:
             url=self.delete_url,
             json=unfollow_data
         )
+        self._update_limits(response)
+
         response.raise_for_status()
 
         return response.json()
 
+    @check_rate_limit
     def search_100_posts(self, query: dict):
         """
         Search for the first not more than 100 posts (because the paginated search is prohibited by Bluesky).
@@ -992,12 +1033,14 @@ class Actor:
                 url=self.pds_url + '/xrpc/app.bsky.feed.searchPosts',
                 params=query
         )
+        self._update_limits(response)
+
         response.raise_for_status()
-        cursor = response.json()['cursor']
         posts = response.json()['posts']
         return posts
 
-    def search_posts(self, query: dict, max_results: int = 1000):
+    # limits are checked in the _real_long_list
+    def search_posts(self, query: dict, max_results: int = 100):
         """
         Search for posts. Parameters of the query:
 
@@ -1028,35 +1071,43 @@ class Actor:
             Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
         """
 
-        posts = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_posts(cursor: str = None, **kwargs):
             response = self.session.get(
                 url=self.pds_url + '/xrpc/app.bsky.feed.searchPosts',
                 params=query | {'cursor': cursor}
             )
-            response.raise_for_status()
-            res = response.json()
-            posts.extend(res['posts'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
-            if len(posts) >= max_results:
-                still_some = False
-        return posts
+            self._update_limits(response)
 
+            response.raise_for_status()
+            return response.json()
+
+        search_results = self._read_long_list(
+            fetcher=fetch_posts,
+            parameter='posts',
+            max_results=max_results
+        )
+
+        return search_results
+
+    @check_rate_limit
     def permissions(self, uri: str = None, **kwargs):
+        """ Check the permissions of a thread.
+        :param uri:
+        :param kwargs:
+        :return:
+        """
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
             params={
                 'repo': self.did,
                 'collection': 'app.bsky.feed.threadgate',}
         )
+        self._update_limits(response)
+
         response.raise_for_status()
         return response.json()
 
+    @check_rate_limit
     def restrict(self, uri: str = None, rules: list = None, **kwargs):
         """
         Set the rules of interaction with a thread. List of up to 5 rules.
@@ -1085,18 +1136,16 @@ class Actor:
                     'allow':        rules
                 }
         }
-        if not self._rate_limited():
-            response = self.session.post(
-                url=self.update_url,
-                json=threadgate_data  #
-            )
-            self._update_limits(response)
+        response = self.session.post(
+            url=self.update_url,
+            json=threadgate_data  #
+        )
+        self._update_limits(response)
 
-            response.raise_for_status()
-            return response.json()
-        else:
-            raise Exception('Rate limit exceeded')
+        response.raise_for_status()
+        return response.json()
 
+    @check_rate_limit
     def unrestrict(self, uri: str = None, record_key: str = None, **kwargs):
         """
         Delete the record restricting access to a thread.
@@ -1112,22 +1161,22 @@ class Actor:
             'collection':   'app.bsky.feed.threadgate',
             'rkey':         record_key
         }
-        if not self._rate_limited():
-            try:
-                response = self.session.post(
-                    url=self.delete_url,
-                    json=post_data)
-                response.raise_for_status()
+        try:
+            response = self.session.post(
+                url=self.delete_url,
+                json=post_data)
+            self._update_limits(response)
 
-            except Exception as e:
-                raise Exception(f"Can not delete the restriction:  {e}")
-            return response.json()
-        else:
-            raise Exception('Rate limit exceeded')
+            response.raise_for_status()
+
+        except Exception as e:
+            raise Exception(f"Can not delete the restriction:  {e}")
+
+        return response.json()
 
 
 if __name__ == "__main__":
-    """ Quick tests.
+    """ Quick tests were here.
     """
     pass
     ...
