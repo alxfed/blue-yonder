@@ -513,6 +513,7 @@ class Actor:
 
         return response.json()
 
+    @check_rate_limit
     def read_post(self, uri: str, actor: str = None, **kwargs):
         """
         Read a post with given uri in a given repo. Defaults to own repo.
@@ -526,6 +527,7 @@ class Actor:
                 'rkey': rkey
             }
         )
+        self._update_limits()
         response.raise_for_status()
         return response.json()
 

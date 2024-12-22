@@ -58,7 +58,7 @@ class Another():
                         - or -
         bluesky_handle: a bluesky handle
         """
-        self.did = actor
+        self.did = actor  # bluesky did
         self.handle = bluesky_handle
         if actor or bluesky_handle:
             profile = self._get_profile(actor=actor)
@@ -73,15 +73,13 @@ class Another():
     def _get_profile(self, actor: str = None, **kwargs):
         """
         """
-        if not actor:
-            actor = self.did if self.did else self.handle
+        actor = self.did if self.did else self.handle
         response = requests.get(
             url=self.VIEW_API + '/xrpc/app.bsky.actor.getProfile',
             params = {'actor': actor}
         )
         response.raise_for_status()
-        res = response.json()
-        return res
+        return response.json()
 
     def _records(self, actor: str = None, collection: str = None, **kwargs):
         """
@@ -228,24 +226,19 @@ class Another():
             }
         )
         response.raise_for_status()
-        res = response.json()
-        return res
+        return response.json()
 
 
 if __name__ == '__main__':
     """ Quick tests
     """
-    alex = Another(actor='did:plc:z72i7hdynmk6r22z27h6tvur')
-    # feed_id = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
-    # select = [
-    #     'posts_with_replies',
-    #     'posts_no_replies',
-    #     'posts_with_media',
-    #     'posts_and_author_threads'
-    # ]
-    # feed = alex.authored(filter=select)
+    another = Another(actor='did:plc:wuy7xnc5wmjjneckltq55vmh')
+    select = [
+        'posts_with_replies',
+        'posts_no_replies',
+        'posts_with_media',
+        'posts_and_author_threads'
+    ]
+    posts = another.authored(filter=select)
 
-    # feeds = alex.created_feeds()
-    # followers = alex.followers()
-    # follows = alex.follows()
     ...
