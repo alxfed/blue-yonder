@@ -226,7 +226,7 @@ class Another():
             }
         )
         response.raise_for_status()
-        return response.json()
+        return response.json()['feed']
 
 
 if __name__ == '__main__':
@@ -240,5 +240,7 @@ if __name__ == '__main__':
         'posts_and_author_threads'
     ]
     posts = another.authored(filter=select)
+
+    # post = posts
 
     ...
