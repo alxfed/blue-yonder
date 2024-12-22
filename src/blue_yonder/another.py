@@ -51,11 +51,16 @@ class Another():
     # lists and packs
     lists           = None
 
-    def __init__(self, actor: str = None, **kwargs):
+    def __init__(self, actor: str = None, bluesky_handle: str = None, **kwargs):
         """
         Profile attributes are in the kwargs (obtained by getProfile)
+        actor: a bluesky did
+                        - or -
+        bluesky_handle: a bluesky handle
         """
-        if actor:
+        self.did = actor
+        self.handle = bluesky_handle
+        if actor or bluesky_handle:
             profile = self._get_profile(actor=actor)
             for key, value in profile.items():
                 setattr(self, key, value)

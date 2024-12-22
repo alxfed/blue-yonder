@@ -513,7 +513,7 @@ class Actor:
 
         return response.json()
 
-    def read_post(self, uri: str, repo: str = None, **kwargs):
+    def read_post(self, uri: str, actor: str = None, **kwargs):
         """
         Read a post with given uri in a given repo. Defaults to own repo.
         """
@@ -521,7 +521,7 @@ class Actor:
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.getRecord',
             params={
-                'repo': repo if repo else self.did,  # self if not given.
+                'repo': actor if actor else self.did,  # self if not given.
                 'collection': 'app.bsky.feed.post',
                 'rkey': rkey
             }
