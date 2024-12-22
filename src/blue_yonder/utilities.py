@@ -8,7 +8,7 @@ LICENSE file in the root directory of this source tree.
 import time
 
 
-def read_long_list(fetcher, parameter):
+def read_long_list(fetcher, parameter, self: object = None, **kwargs):
     """ Iterative requests with queries
 
     :param requestor: function that makes queries
@@ -30,7 +30,7 @@ def read_long_list(fetcher, parameter):
     return long_list
 
 
-def read_rate_limits(response):
+def _read_rate_limits(response):
     rh = response.headers
     rlp, rlpw = rh['RateLimit-Policy'].split(';')
     rlpw = rlpw.split('=')[-1]
@@ -44,7 +44,7 @@ def read_rate_limits(response):
     return rate_limits
 
 
-def sleep_if_less_than(rate_limit_reset, less_than=10):
+def sleep_if_less_than(rate_limit_reset: int, less_than=10):
     current_time = time.time()  # Gets current Unix timestamp
     sleep_duration = rate_limit_reset - current_time
 

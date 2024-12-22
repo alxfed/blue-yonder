@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 from time import sleep, time
 from os import environ
 import requests
-from collections import defaultdict
-from blue_yonder.utilities import read_long_list, read_rate_limits
+from blue_yonder.utilities import _read_rate_limits
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -73,28 +72,31 @@ class Actor:
         self.post_url       = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
         self.delete_url     = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
         self.update_url     = self.pds_url + '/xrpc/com.atproto.repo.putRecord'
-        self.list_url = self.pds_url + '/xrpc/app.bsky.graph.getList'
+        self.list_url       = self.pds_url + '/xrpc/app.bsky.graph.getList'
         self.jwt            = kwargs.get('jwt', None)
 
         # Rate limits
         self.RateLimit          = 30
-        self.RateLimitReset     = int(time())
+        self.RateLimitReset     = int(time()) - 1
 
         # Start configuring a blank Session
         self.session.headers.update({'Content-Type': 'application/json'})
 
         # If given an old session web-token - use _it_.
         if self.jwt:
-            # We were given a web-token, install the cookie into the Session.
+            # We were given a web-token appropiate it.
             for key, value in self.jwt.items():
                 setattr(self, key, value)
+
+            # install the token into the Session.
             self.session.headers.update({'Authorization': 'Bearer ' + self.accessJwt})
             try:
+                # Check the validity of the token by muting and unmuting
+                # an unsuspecting victim.
                 self.mute()
-                rate_limits = read_rate_limits( self.unmute())
-                for key, value in rate_limits.items():
-                    setattr(self, key, value)
-            except Exception:
+                self._update_limits(self.unmute())
+
+            except RuntimeError:
                 self._get_token()
         else:
             # No, we were not, let's create a new session.
@@ -110,34 +112,59 @@ class Actor:
         session_data = {'identifier': self.handle, 'password': self.password}
 
         # Requesting permission to fly in the wild blue yonder.
-        try:
-            if self.RateLimitRemaining == 0 and self.RateLimitReset > int(datetime.now(timezone.utc).timestamp()):
-                raise RuntimeError(f'Rate limit exhausted until {datetime.fromtimestamp(self.RateLimitReset)}')
-
-            # Requesting permission to fly in the wild blue yonder.
-            response = self.session.post(
-                url=session_url,
-                json=session_data)
-
-            # update rate limits
-            rate_limits = read_rate_limits(response)
-            for key, value in rate_limits.items():
-                setattr(self, key, value)
-
-            response.raise_for_status()
-
+        if not self._rate_limited():
             try:
-                # Get the handle and access / refresh JWT
-                self.jwt = response.json()
-                for key, value in self.jwt.items():
-                    setattr(self, key, value)
-                # Adjust the Session. Install the cookie into the Session.
-                self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
-            except Exception as e:
-                raise RuntimeError(f'Huston did not give you a JWT:  {e}')
+                # Requesting permission to fly in the wild blue yonder.
+                response = self.session.post(
+                    url=session_url,
+                    json=session_data)
 
-        except Exception as e:
-            raise RuntimeError(f'Huston does not identify you as a human, you are a UFO:  {e}')
+                self._update_limits(response)
+
+                response.raise_for_status()
+
+                try:
+                    # Get the handle and access / refresh JWT
+                    self.jwt = response.json()
+                    for key, value in self.jwt.items():
+                        setattr(self, key, value)
+                    # Adjust the Session. Install the cookie into the Session.
+                    self.session.headers.update({"Authorization": "Bearer " + self.accessJwt})
+                except Exception as e:
+                    raise RuntimeError(f'Huston did not give you a JWT:  {e}')
+
+            except Exception as e:
+                raise RuntimeError(f'Huston does not identify you as a human, you are a UFO:  {e}')
+
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+
+    def _rate_limited(self, wait: int = 10, **kwargs):
+        """ Check the rate limits before making a request.
+        """
+        until_refresh = self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())
+        if until_refresh < 0:
+            return False
+        elif self.RateLimitRemaining > 0:
+            return False
+        elif self.RateLimitRemaining == 0:
+            if until_refresh < wait:
+                sleep(until_refresh)
+                return False
+            else:
+                return True
+        else:
+            return True
+
+    def _update_limits(self, response: requests.Response):
+        rh = response.headers
+        rlp, rlpw = rh['RateLimit-Policy'].split(';')
+        rlpw = rlpw.split('=')[-1]
+        self.RateLimit          = int(rh['RateLimit-Limit'])
+        self.RateLimitRemaining = int(rh['RateLimit-Remaining'])
+        self.RateLimitReset     = int(rh['RateLimit-Reset'])
+        self.RateLimitPolicy    = int(rlp)
+        self.RateLimitPolicyW   = int(rlpw)
 
     def post(self, text: str = None, **kwargs):
         """
@@ -157,114 +184,22 @@ class Actor:
                     'createdAt': now
                 }
         }
-        try:
-            response = self.session.post(url=self.post_url, json=post_data)
-            response.raise_for_status()
-            res = response.json()
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
+        if not self._rate_limited():
+            try:
+                response = self.session.post(url=self.post_url, json=post_data)
+                self._update_limits(response)
 
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
-        return res
+                response.raise_for_status()
+                res = response.json()
+                self.last_uri = res['uri']
+                self.last_cid = res['cid']
+                self.last_rev = res['commit']['rev']
 
-    def like(self, uri: str = None, cid: str = None, **kwargs):
-        """
-        """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-        like_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.feed.like',
-            'record':
-                {
-                    '$type': 'app.bsky.feed.like',
-                    'createdAt': now,
-                    'subject': {
-                        'uri': uri,
-                        'cid': cid
-                    }
-                }
-        }
-
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=like_data)
-
-            response.raise_for_status()
-            res = response.json()
-
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
-
-        return res
-
-    def unlike(self, uri: str = None, record_key: str = None, **kwargs):
-        """
-        """
-        if uri:
-            record_key = uri.split("/")[-1]
-        # Prepare to post
-        elif record_key:
-            pass
+            except Exception as e:
+                raise Exception(f"Error, with talking to Huston:  {e}")
+            return res
         else:
-            raise Exception('Either uri or record_key must be given.')
-
-        like_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.feed.like',
-            'rkey': record_key
-        }
-        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
-        response = self.session.post(
-            url=url_to_del,
-            json=like_data
-        )
-        response.raise_for_status()
-        res = response.json()
-        return res
-
-    def delete_post(self, uri: str = None, record_key: str = None, **kwargs):
-        """
-        """
-        if uri:
-            record_key = uri.split("/")[-1]
-        # Prepare to post
-        post_data = {
-            'repo':         self.did,   # self.handle,
-            'collection':   'app.bsky.feed.post',
-            'rkey':         record_key
-        }
-
-        url_to_del = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
-        try:
-            response = self.session.post(url=url_to_del, json=post_data)
-            response.raise_for_status()
-            res = response.json()
-
-        except Exception as e:
-            raise Exception(f"Can not delete the post:  {e}")
-        return res
-
-    def thread(self, posts_texts: list):
-        """
-            A trill of posts.
-        """
-        first_uri = None
-        first_cid = None
-        first_rev = None
-
-        post_text = posts_texts.pop(0)
-        self.post(text=post_text)
-        first_uri = self.last_uri
-        first_cid = self.last_cid
-        first_rev = self.last_rev
-
-        for post_text in posts_texts:
-            sleep(1)
-            self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     def reply(self, root_post: dict, post: dict, text: str):
         """
@@ -272,8 +207,8 @@ class Actor:
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         reply_data = {
-            'repo':         self.did,   # self.handle,
-            'collection':   'app.bsky.feed.post',
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.post',
             'record': {
                 '$type': 'app.bsky.feed.post',
                 'text': text,
@@ -290,24 +225,27 @@ class Actor:
                 }
             }
         }
+        if not self._rate_limited():
+            try:
+                response = self.session.post(
+                    url=self.post_url,
+                    json=reply_data)
+                self._update_limits(response)
 
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=reply_data)
+                response.raise_for_status()
+                res = response.json()
 
-            response.raise_for_status()
-            res = response.json()
+                # Get the handle and access / refresh JWT
+                self.last_uri = res['uri']
+                self.last_cid = res['cid']
+                self.last_rev = res['commit']['rev']
 
-            # Get the handle and access / refresh JWT
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
+            except Exception as e:
+                raise Exception(f"Error, with talking to Huston:  {e}")
 
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
-
-        return res
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     def quote_post(self, embed_post: dict, text: str):
         """
@@ -336,23 +274,136 @@ class Actor:
                     }
                 }
         }
-        try:
+
+        if not self._rate_limited():
+            try:
+                response = self.session.post(
+                    url=self.post_url,
+                    json=quote_data)
+                self._update_limits(response)
+
+                response.raise_for_status()
+                res = response.json()
+
+                # Get the last post attributes
+                self.last_uri = res['uri']
+                self.last_cid = res['cid']
+                self.last_rev = res['commit']['rev']
+
+            except Exception as e:
+                raise Exception(f"Error, with talking to Huston:  {e}")
+
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+
+    def like(self, uri: str = None, cid: str = None, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        like_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.like',
+            'record':
+                {
+                    '$type': 'app.bsky.feed.like',
+                    'createdAt': now,
+                    'subject': {
+                        'uri': uri,
+                        'cid': cid
+                    }
+                }
+        }
+        if not self._rate_limited():
+            try:
+                response = self.session.post(
+                    url=self.post_url,
+                    json=like_data)
+
+                response.raise_for_status()
+                res = response.json()
+
+            except Exception as e:
+                raise Exception(f"Error, with talking to Huston:  {e}")
+
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+
+    def unlike(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        like_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.like',
+            'rkey': record_key
+        }
+        if not self._rate_limited():
             response = self.session.post(
-                url=self.post_url,
-                json=quote_data)
+                url=self.delete_url,
+                json=like_data
+            )
+            self._update_limits(response)
 
             response.raise_for_status()
             res = response.json()
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
-            # Get the last post attributes
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
+    def delete_post(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        post_data = {
+            'repo':         self.did,   # self.handle,
+            'collection':   'app.bsky.feed.post',
+            'rkey':         record_key
+        }
 
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
+        # url_to_del = self.delete_url #pds_url + '/xrpc/com.atproto.repo.deleteRecord'
+        if not self._rate_limited():
+            try:
+                response = self.session.post(url=self.delete_url, json=post_data)
+                self._update_limits(response)
 
-        return res
+                response.raise_for_status()
+                res = response.json()
+
+            except Exception as e:
+                raise Exception(f"Can not delete the post:  {e}")
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
+
+    def thread(self, posts_texts: list):
+        """
+            A trill of posts.
+        """
+        first_uri = None
+        first_cid = None
+        first_rev = None
+
+        post_text = posts_texts.pop(0)
+        self.post(text=post_text)
+        first_uri = self.last_uri
+        first_cid = self.last_cid
+        first_rev = self.last_rev
+
+        for post_text in posts_texts:
+            sleep(1)
+            self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
 
     def upload_image(self, file_path, **kwargs):
         """
@@ -372,17 +423,20 @@ class Actor:
         upload_url = self.upload_url
         self.session.headers.update({'Content-Type': mime_type})
 
-        response = self.session.post(
+        if not self._rate_limited():
+            response = self.session.post(
             url=self.upload_url,
             # headers=headers,
             data=img_bytes)
 
-        response.raise_for_status()
-        res = response.json()
-        self.last_blob = res['blob']
-        # restore the default content type.
-        self.session.headers.update({'Content-Type': 'application/json'})
-        return self.last_blob
+            response.raise_for_status()
+            res = response.json()
+            self.last_blob = res['blob']
+            # restore the default content type.
+            self.session.headers.update({'Content-Type': 'application/json'})
+            return self.last_blob
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     def post_image(self, text: str = None,
                    blob: dict = None,   # the blob of uploaded image
@@ -411,34 +465,46 @@ class Actor:
                 }
             }
         }
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=image_data)
+        if not self._rate_limited():
+            try:
+                response = self.session.post(
+                    url=self.post_url,
+                    json=image_data)
 
-            response.raise_for_status()
-            res = response.json()
+                response.raise_for_status()
+                res = response.json()
 
-            # Get the last post attributes
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
-        except Exception as e:
-            raise Exception(f"Error, posting an image:  {e}")
+                # Get the last post attributes
+                self.last_uri = res['uri']
+                self.last_cid = res['cid']
+                self.last_rev = res['commit']['rev']
+            except Exception as e:
+                raise Exception(f"Error, posting an image:  {e}")
 
-        return res
+            return res
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     def last_100_posts(self, repo: str = None, **kwargs):
-        response = self.session.get(
-            url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
-            params={
-                'repo': repo if repo else self.did,  # self if not given.
-                'limit': 100,
-                'reverse': False  # Last post first in the list
-            }
-        )
-        response.raise_for_status()
-        return response.json()
+        """
+
+        :param repo:
+        :param kwargs:
+        :return:
+        """
+        if not self._rate_limited():
+            response = self.session.get(
+                url=self.pds_url + '/xrpc/com.atproto.repo.listRecords',
+                params={
+                    'repo': repo if repo else self.did,  # self if not given.
+                    'limit': 100,
+                    'reverse': False  # Last post first in the list
+                }
+            )
+            response.raise_for_status()
+            return response.json()
+        else:
+            raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     def read_post(self, uri: str, repo: str = None, **kwargs):
         """
@@ -511,7 +577,7 @@ class Actor:
         response.raise_for_status()
 
     def get_lists(self, actor: str = None, **kwargs):
-        self.lists = self.records(actor=actor, collection='app.bsky.graph.list')
+        self.lists = self._records(actor=actor, collection='app.bsky.graph.list')
         return self.lists
 
     def mute(self, mute_actor: str = None, **kwargs):
@@ -534,7 +600,31 @@ class Actor:
         response.raise_for_status()
         return response
 
-    def records(self, actor: str = None, collection: str = None, **kwargs):
+    def _read_long_list(self, fetcher, parameter, **kwargs):
+        """ Iterative requests with queries
+
+        :param requestor: function that makes queries
+        :param parameter:
+        :return:
+        """
+        long_list = []
+        cursor = None
+        while True:
+            if not self._rate_limited(**kwargs):
+                try:
+                    response = fetcher(cursor=cursor)
+                except Exception as e:
+                    raise Exception(f"Error in reading paginated list,  {e}")
+                long_list.extend(response[parameter])
+                cursor = response.get('cursor', None)
+                if not cursor:
+                    break
+            else:
+                break
+
+        return long_list
+
+    def _records(self, actor: str = None, collection: str = None, **kwargs):
         """
         A general function for getting records of a given collection.
         Defaults to own repo.
@@ -551,7 +641,7 @@ class Actor:
             response.raise_for_status()
             return response.json()
 
-        records = read_long_list(
+        records = self._read_long_list(
             fetcher=fetch_records,
             parameter='records'
         )
@@ -615,7 +705,7 @@ class Actor:
             response.raise_for_status()
             return response.json()
 
-        members = read_long_list(
+        members = self._read_long_list(
             fetcher=fetch_members,
             parameter='items')
 
@@ -707,7 +797,7 @@ class Actor:
             response.raise_for_status()
             return response.json()
 
-        list_feed = read_long_list(
+        list_feed = self._read_long_list(
             fetcher=fetch_feed_posts,
             parameter='feed')
 
@@ -894,13 +984,68 @@ class Actor:
             Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
             but that was posted long before the scandal and the disabling of pagination.
         """
+        header = {
+
+        }
 
         response = self.session.get(
                 url=self.pds_url + '/xrpc/app.bsky.feed.searchPosts',
                 params=query
         )
         response.raise_for_status()
-        return response.json()['posts']
+        cursor = response.json()['cursor']
+        posts = response.json()['posts']
+        return posts
+
+    def search_posts(self, query: dict, max_results: int = 1000):
+        """
+        Search for posts. Parameters of the query:
+
+            q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
+
+            sort: string (optional) Possible values: [top, latest]. Specifies the ranking order of results. Default value: latest.
+
+            since: string (optional) Filter results for posts after the indicated datetime (inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
+
+            until: string (optional) Filter results for posts before the indicated datetime (not inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
+
+            mentions: at-identifier (optional) Filter to posts which mention the given account. Handles are resolved to DID before query-time. Only matches rich-text facet mentions.
+
+            author: at-identifier (optional) Filter to posts by the given account. Handles are resolved to DID before query-time.
+
+            lang: language (optional) Filter to posts in the given language. Expected to be based on post language field, though server may override language detection.
+
+            domain: string (optional) Filter to posts with URLs (facet links or embeds) linking to the given domain (hostname). Server may apply hostname normalization.
+
+            url: uri (optional) Filter to posts with links (facet links or embeds) pointing to this URL. Server may apply URL normalization or fuzzy matching.
+
+            tag: string[] Possible values: <= 640 characters. Filter to posts with the given tag (hashtag), based on rich-text facet or tag field. Do not include the hash (#) prefix. Multiple tags can be specified, with 'AND' matching.
+
+            limit: integer (optional) Possible values: >= 1 and <= 100. Default value: 25
+
+            cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
+
+            Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
+        """
+
+        posts = []
+        still_some = True
+        cursor = None
+        while still_some:
+            response = self.session.get(
+                url=self.pds_url + '/xrpc/app.bsky.feed.searchPosts',
+                params=query | {'cursor': cursor}
+            )
+            response.raise_for_status()
+            res = response.json()
+            posts.extend(res['posts'])
+            if 'cursor' in res:
+                cursor = res['cursor']
+            else:
+                still_some = False
+            if len(posts) >= max_results:
+                still_some = False
+        return posts
 
     def permissions(self, uri: str = None, **kwargs):
         response = self.session.get(
@@ -940,13 +1085,17 @@ class Actor:
                     'allow':        rules
                 }
         }
+        if not self._rate_limited():
+            response = self.session.post(
+                url=self.update_url,
+                json=threadgate_data  #
+            )
+            self._update_limits(response)
 
-        response = self.session.post(
-            url=self.update_url,
-            json=threadgate_data  #
-        )
-        response.raise_for_status()
-        return response.json()
+            response.raise_for_status()
+            return response.json()
+        else:
+            raise Exception('Rate limit exceeded')
 
     def unrestrict(self, uri: str = None, record_key: str = None, **kwargs):
         """
@@ -963,93 +1112,23 @@ class Actor:
             'collection':   'app.bsky.feed.threadgate',
             'rkey':         record_key
         }
-        try:
-            response = self.session.post(
-                url=self.delete_url,
-                json=post_data)
-            response.raise_for_status()
+        if not self._rate_limited():
+            try:
+                response = self.session.post(
+                    url=self.delete_url,
+                    json=post_data)
+                response.raise_for_status()
 
-        except Exception as e:
-            raise Exception(f"Can not delete the restriction:  {e}")
-        return response.json()
+            except Exception as e:
+                raise Exception(f"Can not delete the restriction:  {e}")
+            return response.json()
+        else:
+            raise Exception('Rate limit exceeded')
 
 
 if __name__ == "__main__":
+    """ Quick tests.
     """
-    Quick test.
-    """
-    # query = {
-    #     'q': 'AI',
-    #     'sort': 'latest',
-    #     'since': '2024-11-05T21:44:46Z',
-    #     'until': '2024-12-10T21:44:46Z',
-    #     'limit': 100
-    # }
-    my_actor = Actor(bluesky_handle='alxfed.bsky.social')
-
-    lists = my_actor.get_lists()
-    # list_uri ='at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.graph.list/3ldckd6tqsk2j'
-    # members = my_actor.list_members(uri=list_uri)
-    # list_feed = my_actor.list_feed(list_uri=list_uri)
-    res = my_actor.records(collection='app.bsky.graph.list')
-
-    created_list = my_actor.create_list(
-        list_name='Test List',
-        description='Automated creation of a list.',
-    )
-    list_uri = created_list['uri']
-    record_of_addition =my_actor.add_to_list(actor=test_actor, list_uri=list_uri)
-    my_actor.remove_from_list(uri=record_of_addition['uri'])
-    result = my_actor.delete_list(uri=list_uri)
-    # my_actor.add_to_list(actor='reasoning-machine.bsky.social', list_uri=list_uri)
-
-    # res = my_actor.block_list()
-    # feeds = my_actor.timeline()
-    # {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}
-
+    pass
     ...
 
-    # diction = {item if item['$type'] in typosos else None for item in listos}
-    ...
-    # post = my_actor.post(text='This is a post with limited access')
-    # EXAMPLE_LIST_URI = 'at://did:plc:yjvzk3c3uanrlrsdm4uezjqi/app.bsky.graph.list/3lcxml5gmf32s'
-    # rules = [
-    #     {'$type': 'app.bsky.feed.threadgate#mentionRule'},
-    #     {'$type': 'app.bsky.feed.threadgate#followingRule'},
-    #     {'$type': 'app.bsky.feed.threadgate#listRule', 'list': EXAMPLE_LIST_URI}
-    # ]  # Nobody can interact with the post is an empty list - '[]'
-    """{'preferences':[
-    {'$type': 'app.bsky.actor.defs#savedFeedsPref', 'pinned': ['at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky'], 
-    'saved': ['at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/bsky-team', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/hot-classic', 'at://did:plc:tenurhgjptubkk5zf5qhi3og/app.bsky.feed.generator/mutuals', 'at://did:plc:tenurhgjptubkk5zf5qhi3og/app.bsky.feed.generator/catch-up', 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'at://did:plc:mzbt67ojwwerred6cl63tovy/app.bsky.feed.generator/aaaggd6qkteau', 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky']},
-    
-    {'$type': 'app.bsky.actor.defs#savedFeedsPrefV2', 'items': [
-    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot', 'pinned': True, 'id': '3kuxtwubbzc2x'}, 
-    {'type': 'timeline', 'value': 'following', 'pinned': True, 'id': '3kuxtwubcyk2x'}, 
-    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/with-friends', 'pinned': True, 'id': '3lbq7vseyps2m'}, 
-    {'type': 'feed', 'value': 'at://did:plc:552sltcbj2n32vqfg2zkjnyj/app.bsky.feed.generator/aaafjfyjlteum', 'pinned': True, 'id': '3lbuvklomjc2t'}, 
-    {'type': 'feed', 'value': 'at://did:plc:rwkarouaeku2g6qkvqkirwa5/app.bsky.feed.generator/MLSky', 'pinned': True, 'id': '3lc2girn66s2a'}, 
-    {'type': 'feed', 'value': 'at://did:plc:hxg2smawgiuu42lkthu2n6iv/app.bsky.feed.generator/aaaggycjj6hf2', 'pinned': False, 'id': '3lbrlg3nuf22l'}, 
-    {'type': 'feed', 'value': 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.feed.generator/aaagg5vugsigc', 'pinned': False, 'id': '3lbrmsbjfe22t'}, 
-    {'type': 'feed', 'value': 'at://did:plc:mzbt67ojwwerred6cl63tovy/app.bsky.feed.generator/aaaggd6qkteau', 'pinned': False, 'id': '3lbrhvzysjc2a'}, 
-    {'type': 'feed', 'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/bsky-team', 'pinned': False, 'id': '3lbqfsayodc2n'}]}
-    """
-    # result = my_actor.allowed(uri=post['uri'], rules=rules)
-    # posts = my_actor.search_posts(query)
-    # records = my_actor.records(collection='app.bsky.feed.post')
-    # records = my_actor.permissions()
-    # posts = my_actor.get_posts_list()
-    # posts_content = []
-    # for post in posts['records']:
-    #     content = my_actor.read_post(post['uri'])
-    #     posts_content.append(content)
-    # for record in records['records']:
-    #     my_actor.unrestrict(uri=record['uri'])
-    description = my_actor.describe()
-    # followed = my_actor.follow(follow_actor=test_actor)
-    # unfollowed = my_actor.unfollow(uri=followed['uri'])
-    # post = my_actor.post(text='This is a post')
-    # like = my_actor.like(**post)
-    # unlike = my_actor.unlike(uri=like['uri'])
-    # preferences = my_actor.get_preferences()
-    # my_actor.put_preferences(preferences)
-    ...
