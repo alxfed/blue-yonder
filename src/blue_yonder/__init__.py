@@ -7,8 +7,7 @@ LICENSE file in the root directory of this source tree.
 """
 from .actor import Actor, test_actor
 from .another import Another
-from .yonder import (search_100_posts,
-                     search_actors,
+from .yonder import (search_actors,
                      feed,
                      list_feed)
 from .utilities import read_long_list, _read_rate_limits
@@ -21,7 +20,9 @@ __all__ = [
     'Butterfly',
     'Another',
     'Flower',
-    'search_100_posts',
+    'search_actors',
+    'feed',
+    'list_feed',
     'read_long_list',
     '_read_rate_limits',
     'test_actor',

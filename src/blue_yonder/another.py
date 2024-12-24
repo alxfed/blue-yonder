@@ -6,7 +6,7 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime
-from utilities import read_long_list
+from .utilities import read_long_list
 import requests
 
 
