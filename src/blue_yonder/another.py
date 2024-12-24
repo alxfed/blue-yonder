@@ -241,6 +241,16 @@ if __name__ == '__main__':
     ]
     posts = another.authored(filter=select)
 
+    # content labelers did:plc:ar7c4by46qjdydhdevvrndac;redact
+
+    post = posts[1]
+
+    from blue_yonder import Actor
+
+    actor = Actor(bluesky_handle='multilogue.bsky.social')
+
+    logged_post = actor.read_post(uri=post['post']['uri'], actor=another.did)
+
     # post = posts
 
     ...

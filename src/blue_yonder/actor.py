@@ -96,7 +96,7 @@ class Actor:
                 self.mute()
                 self._update_limits(self.unmute())
 
-            except RuntimeError:
+            except Exception:
                 self._get_token()
         else:
             # No, we were not, let's create a new session.
@@ -140,7 +140,7 @@ class Actor:
             raise RuntimeError(f'Rate limited, wait {self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())} seconds')
 
     @staticmethod
-    def check_rate_limit(func):
+    def _check_rate_limit(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             until_refresh = self.RateLimitReset - int(datetime.now(timezone.utc).timestamp())
@@ -185,7 +185,7 @@ class Actor:
         self.RateLimitPolicy    = int(rlp)
         self.RateLimitPolicyW   = int(rlpw)
 
-    @check_rate_limit
+    @_check_rate_limit
     def post(self, text: str = None, **kwargs):
         """
             Post.
@@ -219,7 +219,7 @@ class Actor:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
     def reply(self, root_post: dict, post: dict, text: str):
         """
         """
@@ -264,7 +264,7 @@ class Actor:
 
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
     def quote_post(self, embed_post: dict, text: str):
         """
         Embed a given post (with 'uri' and 'cid') into a new post.
@@ -311,7 +311,7 @@ class Actor:
 
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
     def like(self, uri: str = None, cid: str = None, **kwargs):
         """
         """
@@ -344,7 +344,7 @@ class Actor:
 
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
     def unlike(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -371,7 +371,32 @@ class Actor:
         res = response.json()
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
+    def mark_as_seen(self, uri: str = None, feed_context: str = None, **kwargs):
+        """
+        'app.bsky.feed.defs#blockedPost'
+        """
+        interaction_data = {
+            'interactions': [
+                {
+                    'item': uri,
+                    'event':'app.bsky.feed.defs#interactionSeen',
+                    'feedContext': feed_context
+                }
+            ]
+        }
+        url_path = self.pds_url + '/xrpc/app.bsky.feed.sendInteractions'
+        response = self.session.post(
+            url=url_path,
+            json=interaction_data
+        )
+        self._update_limits(response)
+
+        response.raise_for_status()
+        res = response.json()
+        return res
+
+    @_check_rate_limit
     def delete_post(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -394,7 +419,7 @@ class Actor:
             raise Exception(f"Can not delete the post:  {e}")
         return res
 
-    @check_rate_limit
+    @_check_rate_limit
     def thread(self, posts_texts: list):
         """
             A trill of posts.
@@ -413,7 +438,7 @@ class Actor:
             sleep(1)
             self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
 
-    @check_rate_limit
+    @_check_rate_limit
     def upload_image(self, file_path, **kwargs):
         """
         """
@@ -444,7 +469,7 @@ class Actor:
 
         return self.last_blob
 
-    @check_rate_limit
+    @_check_rate_limit
     def post_image(self, text: str = None,
                    blob: dict = None,   # the blob of uploaded image
                    aspect_ratio: dict = None, # {'height':620,'width':620}
@@ -513,7 +538,7 @@ class Actor:
 
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def read_post(self, uri: str, actor: str = None, **kwargs):
         """
         Read a post with given uri in a given repo. Defaults to own repo.
@@ -527,7 +552,7 @@ class Actor:
                 'rkey': rkey
             }
         )
-        self._update_limits()
+        self._update_limits(response)
         response.raise_for_status()
         return response.json()
 
@@ -553,6 +578,26 @@ class Actor:
         self.feeds = next((item for item in preferences_list if item['$type'] == preference_type), None)['items']
         return self.feeds
 
+    def feed(self, feed_uri: str = None, max_results: int = 100, **kwargs):
+        def fetch_feed(cursor: str = None, **kwargs):
+            response = self.session.get(
+                url=self.pds_url + '/xrpc/app.bsky.feed.getFeed',
+                params={
+                    'feed': feed_uri,
+                    'limit': 50,
+                    'cursor': cursor}
+            )
+            response.raise_for_status()
+            return response.json()
+
+        records = self._read_long_list(
+            fetcher=fetch_feed,
+            parameter='feed',
+            max_results=max_results
+        )
+        return records
+
+    @_check_rate_limit
     def _get_preferences(self, **kwargs):
         """
         Retrieves the current account's preferences from the Private Data Server.
@@ -568,6 +613,7 @@ class Actor:
         self.preferences = response.json()['preferences']
         return self.preferences
 
+    @_check_rate_limit
     def _put_preferences(self, preferences: dict = None, **kwargs):
         """
         Updates the current account's preferences on the Private Data Server.
@@ -585,11 +631,12 @@ class Actor:
         # The only thing this endpoint returns are codes. Nothing to return.
         response.raise_for_status()
 
+    @_check_rate_limit
     def get_lists(self, actor: str = None, **kwargs):
         self.lists = self._records(actor=actor, collection='app.bsky.graph.list')
         return self.lists
 
-    @check_rate_limit
+    @_check_rate_limit
     def mute(self, mute_actor: str = None, **kwargs):
         """
         Mutes the specified actor.
@@ -602,7 +649,7 @@ class Actor:
         # doesn't return anything besides the code
         response.raise_for_status()
 
-    @check_rate_limit
+    @_check_rate_limit
     def unmute(self, unmute_actor: str = None, **kwargs):
         """ Unmutes the specified actor.
         """
@@ -674,7 +721,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def create_list(self, list_name: str = None,
                     description: str = None,
                     purpose: str = None, **kwargs):
@@ -731,7 +778,7 @@ class Actor:
 
         return members
 
-    @check_rate_limit
+    @_check_rate_limit
     def delete_list(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -758,7 +805,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def add_to_list(self, actor: str, list_uri: str, **kwargs):
         """
         """
@@ -784,7 +831,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def remove_from_list(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -833,7 +880,7 @@ class Actor:
 
         return list_feed
 
-    @check_rate_limit
+    @_check_rate_limit
     def block_list(self, block_list: str = None, **kwargs):
         """
         Blocks the specified list.
@@ -868,7 +915,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def block(self, block_actor: str = None, **kwargs):
         """
         Blocks the specified actor.
@@ -903,7 +950,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def unblock(self, uri: str = None, record_key: str = None, **kwargs):
         """
         """
@@ -930,7 +977,7 @@ class Actor:
 
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def follow(self, follow_actor: str = None, **kwargs):
         """
         Follows the specified actor.
@@ -966,7 +1013,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def unfollow(self, uri: str = None, record_key: str = None, **kwargs):
         """
         Unfollows the actor specified in the record.
@@ -995,7 +1042,7 @@ class Actor:
 
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def search_100_posts(self, query: dict):
         """
         Search for the first not more than 100 posts (because the paginated search is prohibited by Bluesky).
@@ -1091,7 +1138,7 @@ class Actor:
 
         return search_results
 
-    @check_rate_limit
+    @_check_rate_limit
     def permissions(self, uri: str = None, **kwargs):
         """ Check the permissions of a thread.
         :param uri:
@@ -1109,7 +1156,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def restrict(self, uri: str = None, rules: list = None, **kwargs):
         """
         Set the rules of interaction with a thread. List of up to 5 rules.
@@ -1147,7 +1194,7 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
-    @check_rate_limit
+    @_check_rate_limit
     def unrestrict(self, uri: str = None, record_key: str = None, **kwargs):
         """
         Delete the record restricting access to a thread.
