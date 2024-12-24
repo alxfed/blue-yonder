@@ -6,6 +6,7 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime
+from utilities import read_long_list
 import requests
 
 
@@ -86,10 +87,7 @@ class Another():
         A general function for getting records of a given collection.
         Defaults to own repo.
         """
-        records = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_records(cursor: str = None, **kwargs):
             response = requests.get(
                 url=self.records_url,
                 params={
@@ -99,30 +97,26 @@ class Another():
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            records.extend(res['records'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
 
+        records = read_long_list(
+            fetcher=fetch_records,
+            parameter='records'
+        )
         return records
 
     def get_lists(self, actor: str = None, **kwargs):
         self.lists = self._records(actor=actor, collection='app.bsky.graph.list')
         return self.lists
 
-    def read_list(self, uri: str = None, **kwargs):
+    def read_list(self, uri: str = None, max_results: int = 1000, **kwargs):
         """
 
         :param uri:
         :param kwargs:
         :return:
         """
-        members = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_members(cursor: str = None, **kwargs):
             response = requests.get(
                 url=self.VIEW_API + '/xrpc/app.bsky.graph.getList',
                 params={
@@ -131,25 +125,22 @@ class Another():
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            members.extend(res['items'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
 
+        members = read_long_list(
+            fetcher=fetch_members,
+            parameter='items',
+            max_results=max_results
+        )
         return members
 
-    def follows(self, actor: str = None, **kwargs):
+    def follows(self, actor: str = None, max_results: int = 2000, **kwargs):
         """
         """
         if not actor:
             actor = self.did if self.did else self.handle
 
-        follows = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_follows(cursor: str = None, **kwargs):
             response = requests.get(
                 url=self.VIEW_API + '/xrpc/app.bsky.graph.getFollows',
                 params={
@@ -158,24 +149,22 @@ class Another():
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            follows.extend(res['follows'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
+
+        follows = read_long_list(
+            fetcher=fetch_follows,
+            parameter='follows',
+            max_results=max_results
+        )
         return follows
 
-    def followers(self, actor: str = None, **kwargs):
+    def followers(self, actor: str = None, max_results: int = 1000, **kwargs):
         """
         """
         if not actor:
             actor = self.did if self.did else self.handle
 
-        followers = []
-        still_some = True
-        cursor = None
-        while still_some:
+        def fetch_followers(cursor: str = None, **kwargs):
             response = requests.get(
                 url=self.VIEW_API + '/xrpc/app.bsky.graph.getFollowers',
                 params = {
@@ -184,12 +173,13 @@ class Another():
                     'cursor': cursor}
             )
             response.raise_for_status()
-            res = response.json()
-            followers.extend(res['followers'])
-            if 'cursor' in res:
-                cursor = res['cursor']
-            else:
-                still_some = False
+            return response.json()
+
+        followers = read_long_list(
+            fetcher=fetch_followers,
+            parameter='followers',
+            max_results=max_results
+        )
         return followers
 
     def created_feeds(self, actor: str = None, **kwargs):
@@ -215,42 +205,53 @@ class Another():
                 # 'posts_with_media',
                 'posts_and_author_threads'
             ]
-        response = requests.get(
-            url=self.VIEW_API + '/xrpc/app.bsky.feed.getAuthorFeed',
-            params={
-                'actor': self.did,
-                'limit': 50,
-                'cursor': None,
-                'filter': filter,
-                'includePins': True
-            }
+
+        def fetch_posts(cursor: str = None, **kwargs):
+            response = requests.get(
+                url=self.VIEW_API + '/xrpc/app.bsky.feed.getAuthorFeed',
+                params={
+                    'actor': self.did,
+                    'limit': 50,
+                    'filter': filter,
+                    'includePins': True,
+                    'cursor': cursor
+                }
+            )
+            response.raise_for_status()
+            return response.json()
+
+        posts = read_long_list(
+            fetcher=fetch_posts,
+            parameter='feed'
         )
-        response.raise_for_status()
-        return response.json()['feed']
+        return posts
 
 
 if __name__ == '__main__':
     """ Quick tests
     """
-    another = Another(actor='did:plc:wuy7xnc5wmjjneckltq55vmh')
-    select = [
-        'posts_with_replies',
-        'posts_no_replies',
-        'posts_with_media',
-        'posts_and_author_threads'
-    ]
-    posts = another.authored(filter=select)
-
+    another = Another(bluesky_handle='alxfed.bsky.social')
+    # select = [
+    #     'posts_with_replies',
+    #     'posts_no_replies',
+    #     'posts_with_media',
+    #     'posts_and_author_threads'
+    # ]
+    # posts = another.authored() #filter=select)
+    # followers = another.followers()
+    # follows = another.follows()
+    # lists = another.get_lists()
+    list_members = another.read_list(uri='at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.graph.list/3ldckd6tqsk2j')
     # content labelers did:plc:ar7c4by46qjdydhdevvrndac;redact
 
-    post = posts[1]
+    # post = posts[1]
 
-    from blue_yonder import Actor
-
-    actor = Actor(bluesky_handle='multilogue.bsky.social')
-
-    logged_post = actor.read_post(uri=post['post']['uri'], actor=another.did)
-
-    # post = posts
+    # from blue_yonder import Actor
+    #
+    # actor = Actor(bluesky_handle='multilogue.bsky.social')
+    #
+    # logged_post = actor.read_post(uri=post['post']['uri'], actor=another.did)
+    #
+    # # post = posts
 
     ...

@@ -8,7 +8,7 @@ LICENSE file in the root directory of this source tree.
 import time
 
 
-def read_long_list(fetcher, parameter, self: object = None, **kwargs):
+def read_long_list(fetcher, parameter, max_results: int = 100, **kwargs):
     """ Iterative requests with queries
 
     :param requestor: function that makes queries
@@ -23,6 +23,8 @@ def read_long_list(fetcher, parameter, self: object = None, **kwargs):
         except Exception as e:
             raise Exception(f"Error in reading paginated list,  {e}")
         long_list.extend(response[parameter])
+        if len(long_list) >= max_results:
+            break
         cursor = response.get('cursor', None)
         if not cursor:
             break

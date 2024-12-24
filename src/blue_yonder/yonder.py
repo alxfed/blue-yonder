@@ -5,6 +5,7 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
+from utilities import read_long_list
 import requests
 
 
@@ -29,7 +30,7 @@ def get_profiles(actors: list):
         raise Exception('Too many actors.')
 
 
-def feed(feed: dict = None, cursor: str = None, **kwargs):
+def feed(uri: str = None, max_results: int = 100, **kwargs):
     """
     feedContext:
         t-nature
@@ -38,23 +39,27 @@ def feed(feed: dict = None, cursor: str = None, **kwargs):
         t-music
         nettop
     """
-    if not feed:
-        feed = {'id': '3ld6okch7p32l', 'pinned': True, 'type': 'feed',
-                'value': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'}  # default feed
-    response = requests.get(
-        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
-        params={
-            'feed': feed['value'],
-            'limit': 50,
-            'cursor': cursor
-        }
+    def fetch_feed(cursor: str = None, **kwargs):
+        response = requests.get(
+            url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
+            params={
+                'feed': uri,
+                'limit': 50,
+                'cursor': cursor
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
+    records = read_long_list(
+        fetcher=fetch_feed,
+        parameter='feed',
+        max_results=max_results
     )
-    response.raise_for_status()
-    res = response.json()
-    return res
+    return records
 
 
-def list_feed(list: dict = None, cursor: str = None, **kwargs):
+def list_feed(list_uri: str = None, max_results: int = 100, **kwargs):
     """
     feedContext:
         t-nature
@@ -63,22 +68,27 @@ def list_feed(list: dict = None, cursor: str = None, **kwargs):
         t-music
         nettop
     """
-    if not list:
-        raise RuntimeError('No list specified.')
-    response = requests.get(
-        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeed',
-        params={
-            'list': list['uri'],
-            'limit': 50,
-            'cursor': cursor
-        }
+    def fetch_list_feed(cursor: str = None, **kwargs):
+        response = requests.get(
+            url=APP_VIEW_API + '/xrpc/app.bsky.feed.getListFeed',
+            params={
+                'list': list_uri,
+                'limit': 50,
+                'cursor': cursor
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
+    records = read_long_list(
+        fetcher=fetch_list_feed,
+        parameter='feed',
+        max_results=max_results
     )
-    response.raise_for_status()
-    res = response.json()
-    return res
+    return records
 
 
-def search_actors(query: dict):
+def search_actors(query: dict, max_results: int = 100, **kwargs):
     """ Search for actors. Parameters:
 
         q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
@@ -89,79 +99,32 @@ def search_actors(query: dict):
 
         Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
     """
-
-    actors = []
-    still_some = True
-    cursor = None
-    while still_some:
+    def fetch_actors(cursor: str = None, **kwargs):
         response = requests.get(
             url=APP_VIEW_API + '/xrpc/app.bsky.actor.searchActors',
             params={
-                'q': query,
-                'limit': 50,
+                'q': query['q'],
+                'limit': query['limit'],
                 'cursor': cursor}
         )
         response.raise_for_status()
-        res = response.json()
-        actors.extend(res['actors'])
-        if 'cursor' in res:
-            cursor = res['cursor']
-        else:
-            still_some = False
-    return actors
+        return response.json()
 
-
-def search_100_posts(query: dict):
-    """
-    Search a maximum of 100 posts.
-    Parameters of the query:
-
-        q: string (required) Search query string; syntax, phrase, boolean, and faceting is unspecified, but Lucene query syntax is recommended.
-
-        sort: string (optional) Possible values: [top, latest]. Specifies the ranking order of results. Default value: latest.
-
-        since: string (optional) Filter results for posts after the indicated datetime (inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
-
-        until: string (optional) Filter results for posts before the indicated datetime (not inclusive). Expected to use 'sortAt' timestamp, which may not match 'createdAt'. A datetime.
-
-        mentions: at-identifier (optional) Filter to posts which mention the given account. Handles are resolved to DID before query-time. Only matches rich-text facet mentions.
-
-        author: at-identifier (optional) Filter to posts by the given account. Handles are resolved to DID before query-time.
-
-        lang: language (optional) Filter to posts in the given language. Expected to be based on post language field, though server may override language detection.
-
-        domain: string (optional) Filter to posts with URLs (facet links or embeds) linking to the given domain (hostname). Server may apply hostname normalization.
-
-        url: uri (optional) Filter to posts with links (facet links or embeds) pointing to this URL. Server may apply URL normalization or fuzzy matching.
-
-        tag: string[] Possible values: <= 640 characters. Filter to posts with the given tag (hashtag), based on rich-text facet or tag field. Do not include the hash (#) prefix. Multiple tags can be specified, with 'AND' matching.
-
-        limit: integer (optional) Possible values: >= 1 and <= 100. Default value: 25
-
-        cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
-
-        Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
-    """
-    response = requests.get(
-        url=APP_VIEW_API + '/xrpc/app.bsky.feed.searchPosts',
-        params=query
+    actors = read_long_list(
+        fetcher=fetch_actors,
+        parameter='actors',
+        max_results=max_results
     )
-    response.raise_for_status()
-    return response.json()['posts']
+    return actors
 
 
 if __name__ == '__main__':
     # Quick tests
-    query = {
-        'q': 'game theory',
-        'sort': 'latest',
-        'since': '2024-11-05T21:44:46Z',
-        'until': '2024-12-10T21:44:46Z',
-        'limit': 100
-    }
-    # found_posts = search_100_posts(query)
-    feed = feed()
-    # returns
+    actors = search_actors(query={'q': 'AI', 'limit': 50}, max_results=1000)
+    ...
+    uri = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
+    feed = feed(uri=uri, max_results=1000)
+    # getFeedreturns
     list_of_dictionaries   = feed['feed']
     cursor                 = feed['cursor']  # str
     # Every post dictionary consists of
@@ -178,5 +141,4 @@ if __name__ == '__main__':
     embed   = post['embed']
     labels  = post['labels']
     threadgate = post['threadgate']
-    # 'createdAt': '2024-11-05T21:44:46Z'
     ...
