@@ -231,27 +231,5 @@ if __name__ == '__main__':
     """ Quick tests
     """
     another = Another(bluesky_handle='alxfed.bsky.social')
-    # select = [
-    #     'posts_with_replies',
-    #     'posts_no_replies',
-    #     'posts_with_media',
-    #     'posts_and_author_threads'
-    # ]
-    # posts = another.authored() #filter=select)
-    # followers = another.followers()
-    # follows = another.follows()
-    # lists = another.get_lists()
-    list_members = another.read_list(uri='at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.graph.list/3ldckd6tqsk2j')
-    # content labelers did:plc:ar7c4by46qjdydhdevvrndac;redact
-
-    # post = posts[1]
-
-    # from blue_yonder import Actor
-    #
-    # actor = Actor(bluesky_handle='multilogue.bsky.social')
-    #
-    # logged_post = actor.read_post(uri=post['post']['uri'], actor=another.did)
-    #
-    # # post = posts
 
     ...

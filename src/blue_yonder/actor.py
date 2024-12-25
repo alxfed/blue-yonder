@@ -556,6 +556,22 @@ class Actor:
         response.raise_for_status()
         return response.json()
 
+    @_check_rate_limit
+    def read_thread(self, uri: str, **kwargs):
+        """
+        Read a thread with given uri in a given repo. Defaults to own repo.
+        """
+        rkey = uri.split("/")[-1]  # is the last part of the URI
+        response = self.session.get(
+            url=self.pds_url + '/xrpc/app.bsky.feed.getPostThread',
+            params={
+                'uri': uri,  # self if not given.
+                'depth': 6,
+                'parentHeight': 100
+            }
+        )
+        self._update_limits(response)
+
     def get_profile(self, actor: str = None, **kwargs):
         """
         Get profile of a given actor. Defaults to actor's own.
@@ -662,6 +678,19 @@ class Actor:
         response.raise_for_status()
         return response  # this is for the __init__ check of JWT
 
+    @_check_rate_limit
+    def mute_thread(self, mute_thread: str = None, **kwargs):
+        """
+        Mutes the specified actor.
+        """
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.graph.muteThread',
+            json={'root': mute_thread},  # mute_data
+        )
+        self._update_limits(response)
+        # doesn't return anything besides the code
+        response.raise_for_status()
+
     def _read_long_list(self, fetcher, parameter, max_results: int = 1000, **kwargs):
         """ Iterative requests with queries
 
@@ -711,6 +740,7 @@ class Actor:
         )
         return records
 
+    @_check_rate_limit
     def describe(self, actor: str = None, **kwargs):
         """
         """
