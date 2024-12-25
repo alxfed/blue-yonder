@@ -6,7 +6,7 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime
-from .utilities import read_long_list
+from blue_yonder.utilities import read_long_list
 import requests
 
 
@@ -78,6 +78,16 @@ class Another():
         response = requests.get(
             url=self.VIEW_API + '/xrpc/app.bsky.actor.getProfile',
             params = {'actor': actor}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _describe(self, actor: str = None, **kwargs):
+        """
+        """
+        response = requests.get(
+            url="https://bsky.social" + '/xrpc/com.atproto.repo.describeRepo',
+            params={'repo': actor if actor else self.did},
         )
         response.raise_for_status()
         return response.json()
