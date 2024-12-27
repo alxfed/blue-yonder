@@ -201,7 +201,8 @@ class Actor:
                 {
                     '$type': 'app.bsky.feed.post',
                     'text': text,
-                    'createdAt': now
+                    'createdAt': now,
+                    'langs': ['en-GB', 'en-US']
                 }
         }
         try:
