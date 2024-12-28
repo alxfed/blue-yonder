@@ -8,6 +8,8 @@ LICENSE file in the root directory of this source tree.
 from .actor import Actor, test_actor
 from .another import Another
 from .yonder import (search_actors,
+                     get_feed_generator,
+                     get_feed_skeleton,
                      feed,
                      list_feed)
 from .utilities import read_long_list, _read_rate_limits

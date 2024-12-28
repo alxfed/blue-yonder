@@ -30,6 +30,28 @@ def get_profiles(actors: list):
         raise Exception('Too many actors.')
 
 
+def get_feed_generator(uri: str = None):
+    response = requests.get(
+        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeedGenerator',
+        params={'feed': uri}
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_feed_skeleton(uri: str = None):
+    response = requests.get(
+        url=APP_VIEW_API + '/xrpc/app.bsky.feed.getFeedSkeleton',
+        params={
+            'feed': uri,
+            'limit': 50,
+            'cursor': None
+        }
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def feed(uri: str = None, max_results: int = 100, **kwargs):
     """
     feedContext:
