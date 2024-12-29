@@ -58,8 +58,10 @@ class Actor:
     RateLimitPolicyW    = None
 
     def __init__(self, **kwargs):
-        """
-            Create an Actor
+        """ Create an Actor, pass the bluesky_handle and bluesky_password
+        as kwargs if there are no environment variables;
+        pass the previous session jwt as a keyword argument 'jwt' if you want
+        to reuse sessions.
         """
 
         self.did            = None
