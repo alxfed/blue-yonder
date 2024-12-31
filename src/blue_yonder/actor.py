@@ -682,12 +682,47 @@ class Actor:
         return response  # this is for the __init__ check of JWT
 
     @_check_rate_limit
+    def get_mutes(self, max_results: int = 10000, **kwargs):
+        """
+        """
+        def fetch_mutes(cursor: str = None, **kwargs):
+            response = self.session.get(
+                url=self.pds_url + '/xrpc/app.bsky.graph.getMutes',
+                params={'cursor': cursor}
+            )
+            self._update_limits(response)
+
+            response.raise_for_status()
+            return response.json()
+
+        search_results = self._read_long_list(
+            fetcher=fetch_mutes,
+            parameter='mutes',
+            max_results=max_results
+        )
+
+        return search_results
+
+    @_check_rate_limit
     def mute_thread(self, mute_thread: str = None, **kwargs):
         """
         Mutes the specified actor.
         """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.muteThread',
+            json={'root': mute_thread},  # mute_data
+        )
+        self._update_limits(response)
+        # doesn't return anything besides the code
+        response.raise_for_status()
+
+    @_check_rate_limit
+    def unmute_thread(self, mute_thread: str = None, **kwargs):
+        """
+        Mutes the specified actor.
+        """
+        response = self.session.post(
+            url=self.pds_url + '/xrpc/app.bsky.graph.unmuteThread',
             json={'root': mute_thread},  # mute_data
         )
         self._update_limits(response)
@@ -1009,6 +1044,28 @@ class Actor:
         response.raise_for_status()
 
         return response.json()
+
+    @_check_rate_limit
+    def get_blocks(self, max_results: int = 10000, **kwargs):
+        """
+        """
+        def fetch_blocks(cursor: str = None, **kwargs):
+            response = self.session.get(
+                url=self.pds_url + '/xrpc/app.bsky.graph.getBlocks',
+                params={'cursor': cursor}
+            )
+            self._update_limits(response)
+
+            response.raise_for_status()
+            return response.json()
+
+        search_results = self._read_long_list(
+            fetcher=fetch_blocks,
+            parameter='blocks',
+            max_results=max_results
+        )
+
+        return search_results
 
     @_check_rate_limit
     def follow(self, follow_actor: str = None, **kwargs):
