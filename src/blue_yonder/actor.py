@@ -755,7 +755,7 @@ class Actor:
 
         return long_list
 
-    def _records(self, actor: str = None, collection: str = None, **kwargs):
+    def _records(self, actor: str = None, collection: str = None, max_results: int = 1000, **kwargs):
         """
         A general function for getting records of a given collection.
         Defaults to own repo.
@@ -774,7 +774,8 @@ class Actor:
 
         records = self._read_long_list(
             fetcher=fetch_records,
-            parameter='records'
+            parameter='records',
+            max_results=max_results
         )
         return records
 
@@ -1104,7 +1105,7 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def unfollow(self, uri: str = None, record_key: str = None, **kwargs):
+    def _unfollow_uri(self, uri: str = None, record_key: str = None, **kwargs):
         """
         Unfollows the actor specified in the record.
         """
@@ -1131,6 +1132,26 @@ class Actor:
         response.raise_for_status()
 
         return response.json()
+
+    @_check_rate_limit
+    def unfollow(self, actor: str = None, records: list = None, **kwargs):
+        """
+        Unfollows the actor specified in the record.
+        """
+        if not records:
+            records = self._records(actor=self.did, collection='app.bsky.graph.follow', max_results=10000)
+
+        uri = None
+        for record in records:
+            if record['value']['subject'] == actor:
+                uri = record['uri']
+                break
+        if uri:
+            result = self._unfollow_uri(uri=uri)
+        else:
+            raise Exception('Actor has not been followed.')
+
+        return result, records
 
     @_check_rate_limit
     def search_100_posts(self, query: dict):
