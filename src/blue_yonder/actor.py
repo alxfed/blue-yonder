@@ -591,9 +591,6 @@ class Actor:
         """
             A trill of posts.
         """
-        first_uri = None
-        first_cid = None
-        first_rev = None
 
         root_image = paths_and_texts.pop(0)
         self.upload_image(file_path=root_image['path'])
@@ -616,9 +613,9 @@ class Actor:
                 }
             }
             self.post_image(
-                text=path_and_text['text'],
+                text=path_and_text.get('text', None),
                 blob=self.last_blob,
-                alt_text=path_and_text['alt_text'],
+                alt_text=path_and_text.get('alt_text', None),
                 reply=reply)
 
     def last_100_posts(self, repo: str = None, **kwargs):
