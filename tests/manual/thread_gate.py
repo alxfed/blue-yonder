@@ -16,7 +16,7 @@ rules = [
 #     {'$type': 'app.bsky.feed.threadgate#mentionRule'},
 #     {'$type': 'app.bsky.feed.threadgate#followingRule'},
     {'$type': 'app.bsky.feed.threadgate#listRule', 'list': EXAMPLE_LIST_URI}
- ]  # Nobody can interact with the post where rulesis an empty list - '[]'
+ ]  # Nobody can interact with the post where rules is an empty list - '[]'
 
 result = my_actor.restrict(uri=post['uri'], rules=rules)
 

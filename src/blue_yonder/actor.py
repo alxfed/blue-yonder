@@ -188,10 +188,11 @@ class Actor:
         self.RateLimitPolicyW   = int(rlpw)
 
     @_check_rate_limit
-    def post(self, text: str = None, **kwargs):
+    def post(self, text: str = None, reply: dict = None, **kwargs):
         """
             Post.
         :param text:
+        :param reply:
         :return:
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -204,6 +205,56 @@ class Actor:
                     '$type': 'app.bsky.feed.post',
                     'text': text,
                     'createdAt': now,
+                    'reply': reply,  #{
+                    #     'root': {
+                    #         'uri': root_post['uri'],
+                    #         'cid': root_post['cid']
+                    #     },
+                    #     'parent': {
+                    #         'uri': post['uri'],
+                    #         'cid': post['cid']
+                    #     }
+                    # },
+                    'langs': ['en-GB', 'en-US']
+                }
+        }
+        try:
+            response = self.session.post(url=self.post_url, json=post_data)
+            # read the returned limits left.
+            self._update_limits(response)
+
+            response.raise_for_status()
+            res = response.json()
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
+
+        except Exception as e:
+            raise Exception(f"Error, with talking to Bluesky API:  {e}")
+        return res
+
+    @_check_rate_limit
+    def _post(self, text: str = None,
+              reply: dict = None,
+              embed: dict = None, **kwargs):
+        """
+            Post.
+        :param text:
+        :param reply:
+        :return:
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        # Prepare to post
+        post_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.post',
+            'record':
+                {
+                    '$type': 'app.bsky.feed.post',
+                    'text': text,
+                    'createdAt': now,
+                    'reply': reply,
+                    'embed': embed,
                     'langs': ['en-GB', 'en-US']
                 }
         }
@@ -244,7 +295,8 @@ class Actor:
                         'uri': post['uri'],
                         'cid': post['cid']
                     }
-                }
+                },
+                'langs': ['en-GB', 'en-US']
             }
         }
 
@@ -439,7 +491,11 @@ class Actor:
 
         for post_text in posts_texts:
             sleep(1)
-            self.reply(root_post={'uri': first_uri, 'cid': first_cid}, post={'uri': self.last_uri, 'cid': self.last_cid}, text=post_text)
+            self.reply(
+                root_post={'uri': first_uri, 'cid': first_cid},
+                post={'uri': self.last_uri, 'cid': self.last_cid},
+                text=post_text
+            )
 
     @_check_rate_limit
     def upload_image(self, file_path, **kwargs):
@@ -476,7 +532,8 @@ class Actor:
     def post_image(self, text: str = None,
                    blob: dict = None,   # the blob of uploaded image
                    aspect_ratio: dict = None, # {'height':620,'width':620}
-                   alt_text: str = '', **kwargs):
+                   alt_text: str = 'No alternative text was provided',
+                   reply: dict = None, **kwargs):
         """
         """
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -488,6 +545,16 @@ class Actor:
                 '$type': 'app.bsky.feed.post',
                 'text': text,
                 'createdAt': now,
+                'reply': reply, # {
+                    # 'root': {
+                    #     'uri': root_post['uri'],
+                    #     'cid': root_post['cid']
+                    # },
+                    # 'parent': {
+                    #     'uri': post['uri'],
+                    #     'cid': post['cid']
+                    # }
+                # }
                 'embed': {
                     '$type': 'app.bsky.embed.images',
                     'images': [
@@ -497,7 +564,8 @@ class Actor:
                             'image': blob
                         }
                     ]
-                }
+                },
+                'langs': ['en-GB', 'en-US']
             }
         }
         try:
@@ -518,6 +586,39 @@ class Actor:
             raise Exception(f"Error, posting an image:  {e}")
 
         return res
+
+    def thread_of_images(self, paths_and_texts: list):
+        """
+            A trill of posts.
+        """
+        first_uri = None
+        first_cid = None
+        first_rev = None
+
+        root_image = paths_and_texts.pop(0)
+        self.upload_image(file_path=root_image['path'])
+        self.post_image(text=root_image['text'], blob=self.last_blob, alt_text=root_image['alt_text'])
+        first_uri = self.last_uri
+        first_cid = self.last_cid
+        first_rev = self.last_rev
+
+        for path_and_text in paths_and_texts:
+            sleep(1)
+            reply = {
+                'root_post': {
+                    'uri': first_uri,
+                    'cid': first_cid
+                },
+                'post': {
+                    'uri': self.last_uri,
+                    'cid': self.last_cid
+                }
+            }
+            self.post_image(
+                text=path_and_text['text'],
+                blob=self.last_blob,
+                alt_text=path_and_text['alt_text'],
+                reply=reply)
 
     def last_100_posts(self, repo: str = None, **kwargs):
         """
@@ -704,13 +805,13 @@ class Actor:
         return search_results
 
     @_check_rate_limit
-    def mute_thread(self, mute_thread: str = None, **kwargs):
+    def mute_thread(self, thread: str = None, **kwargs):
         """
         Mutes the specified actor.
         """
         response = self.session.post(
             url=self.pds_url + '/xrpc/app.bsky.graph.muteThread',
-            json={'root': mute_thread},  # mute_data
+            json={'root': thread},  # mute_data
         )
         self._update_limits(response)
         # doesn't return anything besides the code
