@@ -603,6 +603,7 @@ class Actor:
         first_rev = self.last_rev
 
         for path_and_text in paths_and_texts:
+            self.upload_image(file_path=path_and_text['path'])
             sleep(1)
             reply = {
                 'root_post': {
