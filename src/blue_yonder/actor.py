@@ -545,16 +545,6 @@ class Actor:
                 '$type': 'app.bsky.feed.post',
                 'text': text,
                 'createdAt': now,
-                'reply': reply, # {
-                    # 'root': {
-                    #     'uri': root_post['uri'],
-                    #     'cid': root_post['cid']
-                    # },
-                    # 'parent': {
-                    #     'uri': post['uri'],
-                    #     'cid': post['cid']
-                    # }
-                # }
                 'embed': {
                     '$type': 'app.bsky.embed.images',
                     'images': [
@@ -568,6 +558,9 @@ class Actor:
                 'langs': ['en-GB', 'en-US']
             }
         }
+        if reply:
+            image_data['record']['reply'] = reply
+
         try:
             response = self.session.post(
                 url=self.post_url,
@@ -603,19 +596,19 @@ class Actor:
             self.upload_image(file_path=path_and_text['path'])
             sleep(1)
             reply = {
-                'root_post': {
+                'root': {
                     'uri': first_uri,
                     'cid': first_cid
                 },
-                'post': {
+                'parent': {
                     'uri': self.last_uri,
                     'cid': self.last_cid
                 }
             }
             self.post_image(
-                text=path_and_text.get('text', None),
+                text=path_and_text.get('text', ''),
                 blob=self.last_blob,
-                alt_text=path_and_text.get('alt_text', None),
+                alt_text=path_and_text.get('alt_text', 'No alternative text was provided'),
                 reply=reply)
 
     def last_100_posts(self, repo: str = None, **kwargs):
