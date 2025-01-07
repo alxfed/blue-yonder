@@ -674,9 +674,9 @@ class Actor:
 
         result = response.json()
         thread = result.get('thread', '')
-        threadgate = result.get('threadgate', None)
+        # threadgate = result.get('threadgate', None)
 
-        return thread, threadgate
+        return thread
 
     def get_profile(self, actor: str = None, **kwargs):
         """

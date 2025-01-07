@@ -17,6 +17,7 @@ handle = post_url.split('/')[-3]
 # somebody = Another()
 uri = Another().uri_from_url(url=post_url)
 
-# thread, threadgate = Another().read_thread(uri=uri)
+my_actor = Actor()
+thread = my_actor.read_thread(uri=uri)
 url = Another().url_from_uri(uri=uri)
 ...
