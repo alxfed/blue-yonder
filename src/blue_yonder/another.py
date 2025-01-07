@@ -236,6 +236,31 @@ class Another():
         )
         return posts
 
+    def read_thread(self, uri: str, **kwargs):
+        """
+        Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
+        """
+        response = requests.get(
+            url=self.VIEW_API + '/xrpc/app.bsky.feed.getPostThread',
+            params={
+                'uri': uri,
+                'depth': kwargs.get('depth', 10),  # kwv or 10
+                'parentHeight': kwargs.get('parent_height', 100),  # kwv or 100
+            }
+        )
+        response.raise_for_status()
+        result = response.json()
+        thread = result.get('thread','')
+        threadgate = result.get('threadgate', None)
+
+        return thread, threadgate
+
+    def uri_from_url(self, url:str, **kwargs):
+        chunks = url.split("/")
+        handle = chunks[-3]
+        rkey = chunks[-1]
+        return f"at://{handle}/app.bsky.feed.post/{rkey}"
+
 
 if __name__ == '__main__':
     """ Quick tests

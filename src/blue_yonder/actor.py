@@ -253,25 +253,29 @@ class Actor:
                     '$type': 'app.bsky.feed.post',
                     'text': text,
                     'createdAt': now,
-                    'reply': reply,
-                    'embed': embed,
                     'langs': ['en-GB', 'en-US']
                 }
         }
+        if reply:
+            post_data['record']['reply'] = reply
+        if embed:
+            post_data['record']['embed'] = embed
         try:
+            # You can check the data that you will be posting at this point.
             response = self.session.post(url=self.post_url, json=post_data)
-            # read the returned limits left.
+            # Read the limits left that were returned in the headers.
             self._update_limits(response)
-
+            # Check whether the request was successful.
             response.raise_for_status()
-            res = response.json()
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
+            # Decode the result and update the state of the Actor object.
+            result = response.json()
+            self.last_uri = result['uri']
+            self.last_cid = result['cid']
+            self.last_rev = result['commit']['rev']
 
         except Exception as e:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
-        return res
+        return result
 
     @_check_rate_limit
     def reply(self, root_post: dict, post: dict, text: str):
@@ -654,18 +658,25 @@ class Actor:
     @_check_rate_limit
     def read_thread(self, uri: str, **kwargs):
         """
-        Read a thread with given uri in a given repo. Defaults to own repo.
+        Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """
         rkey = uri.split("/")[-1]  # is the last part of the URI
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.feed.getPostThread',
             params={
                 'uri': uri,  # self if not given.
-                'depth': 6,
-                'parentHeight': 100
+                'depth': kwargs.get('depth', 10),  # kwv or 10
+                'parentHeight': kwargs.get('parent_height', 100),  # kwv or 100
             }
         )
         self._update_limits(response)
+        response.raise_for_status()
+
+        result = response.json()
+        thread = result.get('thread', '')
+        threadgate = result.get('threadgate', None)
+
+        return thread, threadgate
 
     def get_profile(self, actor: str = None, **kwargs):
         """

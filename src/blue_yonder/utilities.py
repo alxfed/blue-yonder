@@ -61,5 +61,12 @@ def url_from_rkey(handle:str, rkey:str, **kwargs):
     return f"https://bsky.app/profile/{handle}/post/{rkey}"
 
 
+def split_url(url:str, **kwargs):
+    chunks = url.split("/")
+    handle = chunks[-3]
+    rkey = chunks[-1]
+    return handle, rkey
+
+
 if __name__ == '__main__':
     pass
