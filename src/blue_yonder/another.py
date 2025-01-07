@@ -255,11 +255,20 @@ class Another():
 
         return thread, threadgate
 
-    def uri_from_url(self, url:str, **kwargs):
+    def uri_from_url(self, url: str, **kwargs):
         chunks = url.split("/")
-        handle = chunks[-3]
         rkey = chunks[-1]
-        return f"at://{handle}/app.bsky.feed.post/{rkey}"
+        handle = chunks[-3]
+        hshe = Another(bluesky_handle=handle)
+        # uri = "at://did:plc:abc123..../app.bsky.feed.post/xyz..."
+        return f'at://{hshe.did}/app.bsky.feed.post/{rkey}'
+
+    def url_from_uri(self, uri: str, **kwargs):
+        chunks = uri.split("/")
+        rkey = chunks[-1]
+        did = chunks[-3]
+        hshe = Another(actor=did)
+        return f'https://bsky.app/profile/{hshe.handle}/post/{rkey}'
 
 
 if __name__ == '__main__':

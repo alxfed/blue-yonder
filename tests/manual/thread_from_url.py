@@ -12,16 +12,11 @@ from blue_yonder.utilities import split_url
 # post in the middle url: https://bsky.app/profile/yoavartzi.com/post/3lf4huh3lf22w
 
 post_url = 'https://bsky.app/profile/yoavartzi.com/post/3lf4huh3lf22w'
-handle, rkey = split_url(post_url)
+handle = post_url.split('/')[-3]
 
-somebody = Another(bluesky_handle=handle)
-his_posts = somebody.authored()
+# somebody = Another()
+uri = Another().uri_from_url(url=post_url)
 
-for post in his_posts:
-    uri = post['post']['uri']
-    key = uri.split('/')[-1]
-    if key == rkey:
-        break
-
-thread, threadgate = somebody.read_thread(uri=uri)
+# thread, threadgate = Another().read_thread(uri=uri)
+url = Another().url_from_uri(uri=uri)
 ...
