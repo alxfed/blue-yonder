@@ -255,7 +255,6 @@ class Another():
 
         return thread
 
-    @staticmethod
     def uri_from_url(self, url: str, **kwargs):
         chunks = url.split("/")
         rkey = chunks[-1]
@@ -264,7 +263,6 @@ class Another():
         # uri = "at://did:plc:abc123..../app.bsky.feed.post/xyz..."
         return f'at://{hshe.did}/app.bsky.feed.post/{rkey}'
 
-    @staticmethod
     def url_from_uri(self, uri: str, **kwargs):
         chunks = uri.split("/")
         rkey = chunks[-1]

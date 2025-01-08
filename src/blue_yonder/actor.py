@@ -660,7 +660,6 @@ class Actor:
         """
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """
-        rkey = uri.split("/")[-1]  # is the last part of the URI
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.feed.getPostThread',
             params={
