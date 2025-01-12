@@ -10,6 +10,7 @@ from time import sleep, time
 from os import environ
 import requests
 from functools import wraps
+from blue_yonder.utilities import split_uri, split_url
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -27,7 +28,7 @@ class Actor:
     upload_url  = None
     update_url  = None
     delete_url  = None
-    list_url   = None
+    list_url    = None
     did         = None
     accessJwt   = None
     refreshJwt  = None
@@ -74,6 +75,7 @@ class Actor:
         self.post_url       = self.pds_url + '/xrpc/com.atproto.repo.createRecord'
         self.delete_url     = self.pds_url + '/xrpc/com.atproto.repo.deleteRecord'
         self.update_url     = self.pds_url + '/xrpc/com.atproto.repo.putRecord'
+        self.upload_url     = self.pds_url + '/xrpc/com.atproto.repo.uploadBlob'
         self.list_url       = self.pds_url + '/xrpc/app.bsky.graph.getList'
         self.jwt            = kwargs.get('jwt', None)
 
@@ -188,78 +190,38 @@ class Actor:
         self.RateLimitPolicyW   = int(rlpw)
 
     @_check_rate_limit
-    def post(self, text: str = None, reply: dict = None, **kwargs):
+    def _post(self, text: str = None, **kwargs):
         """
             Post.
         :param text:
-        :param reply:
+        reply and embed - in the kwargs
         :return:
         """
+        # Pick up what's in the kwargs.
+        text    = kwargs.get('text', text)
+        reply   = kwargs.get('reply', None)
+        embed   = kwargs.get('embed', None)
+
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        # Prepare to post
-        post_data = {
-            'repo':         self.did,   # self.handle,
-            'collection':   'app.bsky.feed.post',
-            'record':
-                {
-                    '$type': 'app.bsky.feed.post',
-                    'text': text,
-                    'createdAt': now,
-                    'reply': reply,  #{
-                    #     'root': {
-                    #         'uri': root_post['uri'],
-                    #         'cid': root_post['cid']
-                    #     },
-                    #     'parent': {
-                    #         'uri': post['uri'],
-                    #         'cid': post['cid']
-                    #     }
-                    # },
-                    'langs': ['en-GB', 'en-US']
-                }
+        # Prepare the record
+        record = {
+            '$type': 'app.bsky.feed.post',
+            'text': text,
+            'createdAt': now,
+            'langs': ['en-GB', 'en-US']
         }
-        try:
-            response = self.session.post(url=self.post_url, json=post_data)
-            # read the returned limits left.
-            self._update_limits(response)
+        if reply:
+            record['reply'] = reply
+        if embed:
+            record['embed'] = embed
 
-            response.raise_for_status()
-            res = response.json()
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
-
-        except Exception as e:
-            raise Exception(f"Error, with talking to Bluesky API:  {e}")
-        return res
-
-    @_check_rate_limit
-    def _post(self, text: str = None,
-              reply: dict = None,
-              embed: dict = None, **kwargs):
-        """
-            Post.
-        :param text:
-        :param reply:
-        :return:
-        """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         # Prepare to post
         post_data = {
             'repo': self.did,  # self.handle,
             'collection': 'app.bsky.feed.post',
-            'record':
-                {
-                    '$type': 'app.bsky.feed.post',
-                    'text': text,
-                    'createdAt': now,
-                    'langs': ['en-GB', 'en-US']
-                }
+            'record': record
         }
-        if reply:
-            post_data['record']['reply'] = reply
-        if embed:
-            post_data['record']['embed'] = embed
+        # Post
         try:
             # You can check the data that you will be posting at this point.
             response = self.session.post(url=self.post_url, json=post_data)
@@ -277,51 +239,107 @@ class Actor:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
         return result
 
-    @_check_rate_limit
-    def reply(self, root_post: dict, post: dict, text: str):
+    def post(self, text: str = None, **kwargs):
+        """ Post plain text.
+        :param text: plain text string
+        :return:
         """
-        """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        result = self._post(text=text, **kwargs)
+        return result
 
-        reply_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.feed.post',
-            'record': {
-                '$type': 'app.bsky.feed.post',
-                'text': text,
-                'createdAt': now,
-                'reply': {
-                    'root': {
-                        'uri': root_post['uri'],
-                        'cid': root_post['cid']
-                    },
-                    'parent': {
-                        'uri': post['uri'],
-                        'cid': post['cid']
-                    }
+    def reply(self, parent_post: dict, root_post: dict = None, text: str = None, **kwargs):
+        """ Reply to a post with plain text.
+        :param root_post:
+        :param parent_post:
+        :param kwargs:
+        :return:
+        """
+        text = kwargs.get('text', text)
+        new_kwargs = self._reply_kwargs(root_post=root_post, parent_post=parent_post, **kwargs)
+        return self._post(text=text, **new_kwargs)
+
+    def _reply_kwargs(self, parent_post: dict, root_post: dict = None, **kwargs) -> dict:
+        """ Reply to a post with plain text.
+        :param root_post: root post # {'uri': uri, 'cid': cid}
+        :param post: post # {'uri': uri, 'cid': cid}
+        :param text: plain text string
+        :return: return of the _post method.
+        """
+        # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        #
+        # reply_data = {
+        #     'repo': self.did,  # self.handle,
+        #     'collection': 'app.bsky.feed.post',
+        #     'record': {
+        #         '$type': 'app.bsky.feed.post',
+        #         'text': text,
+        #         'createdAt': now,
+        #         'reply': {
+        #             'root': {
+        #                 'uri': root_post['uri'],
+        #                 'cid': root_post['cid']
+        #             },
+        #             'parent': {
+        #                 'uri': post['uri'],
+        #                 'cid': post['cid']
+        #             }
+        #         },
+        #         'langs': ['en-GB', 'en-US']
+        #     }
+        # }
+        #
+        # try:
+        #     response = self.session.post(
+        #         url=self.post_url,
+        #         json=reply_data)
+        #     self._update_limits(response)
+        #
+        #     response.raise_for_status()
+        #     res = response.json()
+        #
+        #     # Get the handle and access / refresh JWT
+        #     self.last_uri = res['uri']
+        #     self.last_cid = res['cid']
+        #     self.last_rev = res['commit']['rev']
+        #
+        # except Exception as e:
+        #     raise Exception(f"Error, with talking to Huston:  {e}")
+        if not root_post:
+            # thread = self.read_thread(uri=parent_post['uri'])
+            post = self.read_post(uri=parent_post['uri'])
+            reply = post['value'].get('reply', None)
+            if reply:
+                root_post = reply['root']
+            else:
+                root_post = parent_post
+            ...
+        reply_kwargs = {
+            'reply': {
+                'root': {
+                    'uri': root_post['uri'],
+                    'cid': root_post['cid']
                 },
-                'langs': ['en-GB', 'en-US']
+                'parent': {
+                    'uri': parent_post['uri'],
+                    'cid': parent_post['cid']
+                }
             }
         }
+        # result = self._post(text=text, reply=reply)
+        return kwargs | reply_kwargs
 
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=reply_data)
-            self._update_limits(response)
-
-            response.raise_for_status()
-            res = response.json()
-
-            # Get the handle and access / refresh JWT
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
-
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
-
-        return res
+    @staticmethod
+    def _embed_record_kwargs(record: dict, **kwargs):
+        embed_record = {
+            'embed': {
+                '$type': 'app.bsky.embed.record',
+                'record': {
+                    'uri': record['uri'],
+                    'cid': record['cid']
+                }
+            }
+        }
+        return kwargs | embed_record
 
     @_check_rate_limit
     def quote_post(self, embed_post: dict, text: str):
@@ -367,6 +385,84 @@ class Actor:
 
         except Exception as e:
             raise Exception(f"Error, with talking to Huston:  {e}")
+
+        return res
+
+    @_check_rate_limit
+    def upload_image(self, file_path, **kwargs):
+        """
+        """
+        mime_type = kwargs.get('mime_type', 'image/png')
+
+        with open(file_path, 'rb') as file:
+            img_bytes = file.read()
+        if len(img_bytes) > 1000000:
+            raise Exception(f'The image file size too large. 1MB maximum.')
+
+        self.session.headers.update({'Content-Type': mime_type})
+        response = self.session.post(
+            url=self.upload_url,
+            data=img_bytes
+        )
+        self._update_limits(response)
+
+        response.raise_for_status()
+        result = response.json()
+        self.last_blob = result['blob']
+        # restore the default content type.
+        self.session.headers.update({'Content-Type': 'application/json'})
+
+        return self.last_blob
+
+    @_check_rate_limit
+    def post_image(self, text: str = None,
+                   blob: dict = None,   # the blob of uploaded image
+                   aspect_ratio: dict = None, # {'height':620,'width':620}
+                   alt_text: str = 'No alternative text was provided',
+                   reply: dict = None, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        image_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.post',
+            'record': {
+                '$type': 'app.bsky.feed.post',
+                'text': text,
+                'createdAt': now,
+                'embed': {
+                    '$type': 'app.bsky.embed.images',
+                    'images': [
+                        {
+                            'alt': alt_text,
+                            'aspectRatio': aspect_ratio if aspect_ratio else {'height':620,'width':620},
+                            'image': blob
+                        }
+                    ]
+                },
+                'langs': ['en-GB', 'en-US']
+            }
+        }
+        if reply:
+            image_data['record']['reply'] = reply
+
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=image_data)
+            # read the returned limits left.
+            self._update_limits(response)
+
+            response.raise_for_status()
+            res = response.json()
+
+            # Update the last post attributes
+            self.last_uri = res['uri']
+            self.last_cid = res['cid']
+            self.last_rev = res['commit']['rev']
+        except Exception as e:
+            raise Exception(f"Error, posting an image:  {e}")
 
         return res
 
@@ -480,109 +576,22 @@ class Actor:
 
     @_check_rate_limit
     def thread(self, posts_texts: list):
+        """ A trill of posts.
+        posts_texts: list of strings
+        :return Nothing
         """
-            A trill of posts.
-        """
-        first_uri = None
-        first_cid = None
-        first_rev = None
-
+        # Create a first ('root') post.
         post_text = posts_texts.pop(0)
         self.post(text=post_text)
-        first_uri = self.last_uri
-        first_cid = self.last_cid
-        first_rev = self.last_rev
+        root_post = {'uri': self.last_uri, 'cid': self.last_cid}
 
         for post_text in posts_texts:
             sleep(1)
-            self.reply(
-                root_post={'uri': first_uri, 'cid': first_cid},
-                post={'uri': self.last_uri, 'cid': self.last_cid},
-                text=post_text
-            )
-
-    @_check_rate_limit
-    def upload_image(self, file_path, **kwargs):
-        """
-        """
-        mime_type = kwargs.get('mime_type', 'image/png')
-        self.upload_url = self.pds_url + '/xrpc/com.atproto.repo.uploadBlob'
-
-        with open(file_path, 'rb') as file:
-            img_bytes = file.read()
-        if len(img_bytes) > 1000000:
-            raise Exception(f'The image file size too large. 1MB maximum.')
-
-        headers = {
-            'Content-Type': mime_type,
-            'Authorization': 'Bearer ' + self.jwt['accessJwt']
-        }
-        self.session.headers.update({'Content-Type': mime_type})
-        response = self.session.post(
-            url=self.upload_url,
-            data=img_bytes
-        )
-        self._update_limits(response)
-
-        response.raise_for_status()
-        res = response.json()
-        self.last_blob = res['blob']
-        # restore the default content type.
-        self.session.headers.update({'Content-Type': 'application/json'})
-
-        return self.last_blob
-
-    @_check_rate_limit
-    def post_image(self, text: str = None,
-                   blob: dict = None,   # the blob of uploaded image
-                   aspect_ratio: dict = None, # {'height':620,'width':620}
-                   alt_text: str = 'No alternative text was provided',
-                   reply: dict = None, **kwargs):
-        """
-        """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-
-        image_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.feed.post',
-            'record': {
-                '$type': 'app.bsky.feed.post',
-                'text': text,
-                'createdAt': now,
-                'embed': {
-                    '$type': 'app.bsky.embed.images',
-                    'images': [
-                        {
-                            'alt': alt_text,
-                            'aspectRatio': aspect_ratio if aspect_ratio else {'height':620,'width':620},
-                            'image': blob
-                        }
-                    ]
-                },
-                'langs': ['en-GB', 'en-US']
-            }
-        }
-        if reply:
-            image_data['record']['reply'] = reply
-
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=image_data)
-            # read the returned limits left.
-            self._update_limits(response)
-
-            response.raise_for_status()
-            res = response.json()
-
-            # Update the last post attributes
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
-        except Exception as e:
-            raise Exception(f"Error, posting an image:  {e}")
-
-        return res
+            kwargs = self._reply_kwargs(
+                root_post=root_post,
+                parent_post={'uri': self.last_uri, 'cid': self.last_cid},
+                text=post_text)
+            self._post(**kwargs)
 
     def thread_of_images(self, paths_and_texts: list):
         """
@@ -638,11 +647,13 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def read_post(self, uri: str, actor: str = None, **kwargs):
+    def read_post(self, uri: str = None, actor: str = None, rkey: str = None, **kwargs):
+        """ Read a post with given uri in a given repo.
+            Defaults to own repo.
         """
-        Read a post with given uri in a given repo. Defaults to own repo.
-        """
-        rkey = uri.split("/")[-1]  # is the last part of the URI
+        if not rkey:
+            actor, rkey = split_uri(uri)
+            # rkey = uri.split("/")[-1]  # is the last part of the URI
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.getRecord',
             params={
@@ -656,10 +667,12 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def read_thread(self, uri: str, **kwargs):
+    def read_thread(self, uri: str, url: str = None, **kwargs):
         """
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """
+        if not uri:
+            uri = self.uri_from_url(url=url)
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.feed.getPostThread',
             params={
@@ -673,20 +686,36 @@ class Actor:
 
         result = response.json()
         thread = result.get('thread', '')
-        # threadgate = result.get('threadgate', None)
+        #   threadgate = result.get('threadgate', None)  # typically not there.
 
         return thread
 
-    def get_profile(self, actor: str = None, **kwargs):
+    def _get_profile(self, at_identifier: str = None, **kwargs):
         """
         Get profile of a given actor. Defaults to actor's own.
         """
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.actor.getProfile',
-            params={'actor': actor if actor else self.handle}
+            params={'actor': at_identifier if at_identifier else self.handle}
         )
         response.raise_for_status()
         return response.json()
+
+    def uri_from_url(self, url: str, **kwargs):
+        # chunks = url.split("/")
+        # rkey = chunks[-1]
+        # handle = chunks[-3]
+        handle, rkey = split_uri(url)
+        hshe = self._get_profile(at_identifier=handle)
+        return f'at://{hshe["did"]}/app.bsky.feed.post/{rkey}'
+
+    def url_from_uri(self, uri: str, **kwargs):
+        # chunks = uri.split("/")
+        # rkey = chunks[-1]
+        # did = chunks[-3]
+        did, rkey = split_uri(uri)
+        hshe = self._get_profile(at_identifier=did)
+        return f'https://bsky.app/profile/{hshe["handle"]}/post/{rkey}'
 
     def feed_preferences(self, **kwargs):
         """

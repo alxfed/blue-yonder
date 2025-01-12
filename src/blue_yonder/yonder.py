@@ -142,7 +142,7 @@ def search_actors(query: dict, max_results: int = 100, **kwargs):
 
 if __name__ == '__main__':
     # Quick tests
-    actors = search_actors(query={'q': 'AI', 'limit': 50}, max_results=1000)
+    # actors = search_actors(query={'q': 'AI', 'limit': 50}, max_results=1000)
     ...
     uri = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
     feed = feed(uri=uri, max_results=1000)

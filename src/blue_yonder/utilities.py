@@ -57,15 +57,18 @@ def sleep_if_less_than(rate_limit_reset: int, less_than=10):
         print("Reset time has already passed")
 
 
-def url_from_rkey(handle:str, rkey:str, **kwargs):
-    return f"https://bsky.app/profile/{handle}/post/{rkey}"
-
-
 def split_url(url:str, **kwargs):
     chunks = url.split("/")
     handle = chunks[-3]
     rkey = chunks[-1]
     return handle, rkey
+
+
+def split_uri(uri:str, **kwargs):
+    chunks = uri.split("/")
+    actor = chunks[-3]
+    rkey = chunks[-1]
+    return actor, rkey
 
 
 if __name__ == '__main__':
