@@ -341,52 +341,111 @@ class Actor:
         }
         return kwargs | embed_record
 
-    @_check_rate_limit
-    def quote_post(self, embed_post: dict, text: str):
+    @staticmethod
+    def _embed_external_kwargs(url: str, title: str = None, description: str = None, thumb: dict = None, **kwargs):
+        external = {
+            'uri': url,
+        }
+        if title:
+            external['title'] = title
+        if description:
+            external['description'] = description
+        if thumb:
+            # 'thumb': {
+            #     '$type': 'blob',
+            #     'ref': {
+            #         '$link': 'bafkreiash5e...'
+            #     },
+            #     'mimeType': 'image/png',
+            #     'size': 23527
+            # }
+            external['thumb'] = thumb
+        embed_external = {
+            'embed': {
+                '$type': 'app.bsky.embed.external',
+                'external': external
+              }
+        }
+        return kwargs | embed_external
+
+    def post_external(self, url: str, text: str = None,
+                      title: str = None, description: str = None,
+                      thumb: dict = None, **kwargs):
+        """ Upload the thumbnail image before if you want
+            to have a preview image.
+        :param url:
+        :param text:
+        :param title:
+        :param description:
+        :param thumb:
+        :param kwargs:
+        :return:
         """
-        Embed a given post (with 'uri' and 'cid') into a new post.
+        new_kwargs = self._embed_external_kwargs(url=url, title=title,
+                                                 description=description,
+                                                 thumb=thumb, **kwargs)
+        result = self._post(text=text, **new_kwargs)
+        return result
+
+    @staticmethod
+    def _embed_quote_kwargs(embed_post: dict, **kwargs):
+        quote = {
+            'embed': {
+                '$type': 'app.bsky.embed.record',
+                'record': {
+                    'uri': embed_post['uri'],
+                    'cid': embed_post['cid']
+                }
+            }
+        }
+        return kwargs | quote
+
+    @_check_rate_limit
+    def quote_post(self, text: str, embed_post: dict, **kwargs):
+        """ Embed a given post (with 'uri' and 'cid') into a new post.
         embed_post: {'uri': uri, 'cid': cid}
         text: string up to 300 characters
-
         output: {'uri': uri, 'cid': cid, ...} of a post with embedded post.
         """
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        #
+        # quote_data = {
+        #     'repo': self.did,  # self.handle,
+        #     'collection': 'app.bsky.feed.post',
+        #     'record':
+        #         {
+        #             '$type': 'app.bsky.feed.post',
+        #             'text': text,
+        #             'createdAt': now,
+        #             'embed': {
+        #                 '$type': 'app.bsky.embed.record',
+        #                 'record': {
+        #                     'uri': embed_post['uri'],
+        #                     'cid': embed_post['cid']
+        #                 }
+        #             }
+        #         }
+        # }
+        # try:
+        #     response = self.session.post(
+        #         url=self.post_url,
+        #         json=quote_data)
+        #     self._update_limits(response)
+        #
+        #     response.raise_for_status()
+        #     res = response.json()
+        #
+        #     # Get the last post attributes
+        #     self.last_uri = res['uri']
+        #     self.last_cid = res['cid']
+        #     self.last_rev = res['commit']['rev']
+        #
+        # except Exception as e:
+        #     raise Exception(f"Error, with talking to Huston:  {e}")
+        new_kwargs = self._embed_quote_kwargs(embed_post=embed_post, **kwargs)
+        result = self._post(text=text, **new_kwargs)
 
-        quote_data = {
-            'repo': self.did,  # self.handle,
-            'collection': 'app.bsky.feed.post',
-            'record':
-                {
-                    '$type': 'app.bsky.feed.post',
-                    'text': text,
-                    'createdAt': now,
-                    'embed': {
-                        '$type': 'app.bsky.embed.record',
-                        'record': {
-                            'uri': embed_post['uri'],
-                            'cid': embed_post['cid']
-                        }
-                    }
-                }
-        }
-        try:
-            response = self.session.post(
-                url=self.post_url,
-                json=quote_data)
-            self._update_limits(response)
-
-            response.raise_for_status()
-            res = response.json()
-
-            # Get the last post attributes
-            self.last_uri = res['uri']
-            self.last_cid = res['cid']
-            self.last_rev = res['commit']['rev']
-
-        except Exception as e:
-            raise Exception(f"Error, with talking to Huston:  {e}")
-
-        return res
+        return result
 
     @_check_rate_limit
     def upload_image(self, file_path, **kwargs):

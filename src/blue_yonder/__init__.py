@@ -12,7 +12,10 @@ from .yonder import (search_actors,
                      get_feed_skeleton,
                      feed,
                      list_feed)
-from .utilities import read_long_list, _read_rate_limits
+from .utilities import (read_long_list,
+                        _read_rate_limits,
+                        split_url,
+                        split_uri)
 
 Butterfly   = Actor     # playful
 Flower      = Another   # aliases
@@ -27,5 +30,7 @@ __all__ = [
     'list_feed',
     'read_long_list',
     '_read_rate_limits',
+    'split_url',
+    'split_uri',
     'test_actor',
 ]
