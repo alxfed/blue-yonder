@@ -51,6 +51,9 @@ class Actor:
     last_rev    = None
     last_blob   = None
 
+    # current
+    query_kwargs = None
+
     # limits
     RateLimit           = None
     RateLimitRemaining  = None
@@ -234,6 +237,7 @@ class Actor:
             self.last_uri = result['uri']
             self.last_cid = result['cid']
             self.last_rev = result['commit']['rev']
+            self.reply_kwargs = None
 
         except Exception as e:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
@@ -244,8 +248,44 @@ class Actor:
         :param text: plain text string
         :return:
         """
+        kwargs = kwargs | self.query_kwargs
         result = self._post(text=text, **kwargs)
+
         return result
+
+    def in_reply_to(self, post_url: str = None, parent_post: dict=None, root_post: dict = None, **kwargs):
+        """ Reply to a post with plain text.
+        :param root_post:
+        :param parent_post:
+        :param kwargs:
+        :return:
+        """
+        if not root_post:
+            if post_url:
+                post = self.read_post(url=post_url)
+            elif parent_post:
+                post = self.read_post(uri=parent_post['uri'])
+            else:
+                raise RuntimeError('No url,root or parent post given.')
+            reply = post['value'].get('reply', None)
+            parent_post = post
+            if reply:
+                root_post = reply['root']
+            else:
+                root_post = post
+        self.query_kwargs = {
+            'reply': {
+                'root': {
+                    'uri': root_post['uri'],
+                    'cid': root_post['cid']
+                },
+                'parent': {
+                    'uri': parent_post['uri'],
+                    'cid': parent_post['cid']
+                }
+            }
+        }
+        return self
 
     def reply(self, parent_post: dict=None, post_url: str = None, root_post: dict = None, text: str = None, **kwargs):
         """ Reply to a post with plain text.
