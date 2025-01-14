@@ -8,14 +8,14 @@ LICENSE file in the root directory of this source tree.
 from blue_yonder.utilities import split_url, split_uri
 from blue_yonder import Actor, Another
 
-external_link_post_text = ''  #'I created this template repository with the help of `blue_yonder` package.'
-THUMBNAIL_FILE = './images/butterfly_big.jpg'
-MIME_TYPE = 'image/jpeg'
-image_alt_text = 'This is an image of a butterfly.'
-title = 'Butterfly'
-description = """Butterfly is a template repository with examples of how to use `blue_yonder`
+external_link_post_text = 'I created this template repository with the help of `blue_yonder` package.'
+THUMBNAIL_FILE  = './images/butterfly_big.jpg'
+MIME_TYPE       = 'image/jpeg'
+image_alt_text  = 'This is an image of a butterfly.'
+title           = 'Butterfly'
+description     = """Butterfly is a template repository with examples of how to use `blue_yonder`
 package. It is a collection of Python scripts for the Bluesky social network. """
-url = 'https://github.com/alxfed/butterfly'
+url             = 'https://github.com/alxfed/butterfly'
 
 
 my_actor = Actor()

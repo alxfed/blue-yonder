@@ -15,5 +15,5 @@ my_actor = Actor()
 url = 'https://bsky.app/profile/multilogue.bsky.social/post/3lfbbfnwbys2c'
 
 
-reply = my_actor.reply(text='This is a reply', parent_post=post)
+reply = my_actor.reply(text='This is a simple reply', post_url=url)
 ...

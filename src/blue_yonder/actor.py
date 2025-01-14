@@ -247,13 +247,26 @@ class Actor:
         result = self._post(text=text, **kwargs)
         return result
 
-    def reply(self, parent_post: dict, root_post: dict = None, text: str = None, **kwargs):
+    def reply(self, parent_post: dict=None, post_url: str = None, root_post: dict = None, text: str = None, **kwargs):
         """ Reply to a post with plain text.
         :param root_post:
         :param parent_post:
         :param kwargs:
         :return:
         """
+        if not root_post:
+            if post_url:
+                post = self.read_post(url=post_url)
+            elif parent_post:
+                post = self.read_post(uri=parent_post['uri'])
+            else:
+                raise RuntimeError('No url,root or parent post given.')
+            reply = post['value'].get('reply', None)
+            parent_post = post
+            if reply:
+                root_post = reply['root']
+            else:
+                root_post = post
         text = kwargs.get('text', text)
         new_kwargs = self._reply_kwargs(root_post=root_post, parent_post=parent_post, **kwargs)
         return self._post(text=text, **new_kwargs)
@@ -265,45 +278,6 @@ class Actor:
         :param text: plain text string
         :return: return of the _post method.
         """
-        # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        #
-        # reply_data = {
-        #     'repo': self.did,  # self.handle,
-        #     'collection': 'app.bsky.feed.post',
-        #     'record': {
-        #         '$type': 'app.bsky.feed.post',
-        #         'text': text,
-        #         'createdAt': now,
-        #         'reply': {
-        #             'root': {
-        #                 'uri': root_post['uri'],
-        #                 'cid': root_post['cid']
-        #             },
-        #             'parent': {
-        #                 'uri': post['uri'],
-        #                 'cid': post['cid']
-        #             }
-        #         },
-        #         'langs': ['en-GB', 'en-US']
-        #     }
-        # }
-        #
-        # try:
-        #     response = self.session.post(
-        #         url=self.post_url,
-        #         json=reply_data)
-        #     self._update_limits(response)
-        #
-        #     response.raise_for_status()
-        #     res = response.json()
-        #
-        #     # Get the handle and access / refresh JWT
-        #     self.last_uri = res['uri']
-        #     self.last_cid = res['cid']
-        #     self.last_rev = res['commit']['rev']
-        #
-        # except Exception as e:
-        #     raise Exception(f"Error, with talking to Huston:  {e}")
         if not root_post:
             # thread = self.read_thread(uri=parent_post['uri'])
             post = self.read_post(uri=parent_post['uri'])
@@ -401,48 +375,22 @@ class Actor:
         return kwargs | quote
 
     @_check_rate_limit
-    def quote_post(self, text: str, embed_post: dict, **kwargs):
-        """ Embed a given post (with 'uri' and 'cid') into a new post.
+    def quote_post(self, text: str, quote_url: str = None, embed_post: dict=None, **kwargs):
+        """ Embed a given post into a new post.
+        quote_url: url of a Bluesky post to quote (optional)
+                        - or -
         embed_post: {'uri': uri, 'cid': cid}
         text: string up to 300 characters
         output: {'uri': uri, 'cid': cid, ...} of a post with embedded post.
         """
-        # now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-        #
-        # quote_data = {
-        #     'repo': self.did,  # self.handle,
-        #     'collection': 'app.bsky.feed.post',
-        #     'record':
-        #         {
-        #             '$type': 'app.bsky.feed.post',
-        #             'text': text,
-        #             'createdAt': now,
-        #             'embed': {
-        #                 '$type': 'app.bsky.embed.record',
-        #                 'record': {
-        #                     'uri': embed_post['uri'],
-        #                     'cid': embed_post['cid']
-        #                 }
-        #             }
-        #         }
-        # }
-        # try:
-        #     response = self.session.post(
-        #         url=self.post_url,
-        #         json=quote_data)
-        #     self._update_limits(response)
-        #
-        #     response.raise_for_status()
-        #     res = response.json()
-        #
-        #     # Get the last post attributes
-        #     self.last_uri = res['uri']
-        #     self.last_cid = res['cid']
-        #     self.last_rev = res['commit']['rev']
-        #
-        # except Exception as e:
-        #     raise Exception(f"Error, with talking to Huston:  {e}")
-        new_kwargs = self._embed_quote_kwargs(embed_post=embed_post, **kwargs)
+        if not embed_post:
+            if quote_url:
+                post = self.read_post(url=quote_url)
+            else:
+                raise RuntimeError('No url,root or post to embedgiven.')
+            embed_post = post
+
+        new_kwargs = self._embed_record_kwargs(embed_post=embed_post, **kwargs)
         result = self._post(text=text, **new_kwargs)
 
         return result
@@ -458,6 +406,7 @@ class Actor:
         if len(img_bytes) > 1000000:
             raise Exception(f'The image file size too large. 1MB maximum.')
 
+        # Define the type of image, that you will be uploading.
         self.session.headers.update({'Content-Type': mime_type})
         response = self.session.post(
             url=self.upload_url,
@@ -706,13 +655,15 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def read_post(self, uri: str = None, actor: str = None, rkey: str = None, **kwargs):
+    def read_post(self, url: str = None, uri: str = None, actor: str = None, rkey: str = None, **kwargs):
         """ Read a post with given uri in a given repo.
             Defaults to own repo.
         """
         if not rkey:
-            actor, rkey = split_uri(uri)
-            # rkey = uri.split("/")[-1]  # is the last part of the URI
+            if url:
+                _, actor, _, rkey = self.uri_from_url(url=url)
+            if uri:
+                actor, rkey = split_uri(uri)
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.getRecord',
             params={
@@ -761,20 +712,16 @@ class Actor:
         return response.json()
 
     def uri_from_url(self, url: str, **kwargs):
-        # chunks = url.split("/")
-        # rkey = chunks[-1]
-        # handle = chunks[-3]
         handle, rkey = split_uri(url)
         hshe = self._get_profile(at_identifier=handle)
-        return f'at://{hshe["did"]}/app.bsky.feed.post/{rkey}'
+        did = hshe['did']
+        return f'at://{did}/app.bsky.feed.post/{rkey}', did, handle, rkey
 
     def url_from_uri(self, uri: str, **kwargs):
-        # chunks = uri.split("/")
-        # rkey = chunks[-1]
-        # did = chunks[-3]
         did, rkey = split_uri(uri)
         hshe = self._get_profile(at_identifier=did)
-        return f'https://bsky.app/profile/{hshe["handle"]}/post/{rkey}'
+        handle = hshe['handle']
+        return f'https://bsky.app/profile/{handle}/post/{rkey}', did , handle, rkey
 
     def feed_preferences(self, **kwargs):
         """
