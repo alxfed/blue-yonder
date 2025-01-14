@@ -390,7 +390,7 @@ class Actor:
                 raise RuntimeError('No url,root or post to embedgiven.')
             embed_post = post
 
-        new_kwargs = self._embed_record_kwargs(embed_post=embed_post, **kwargs)
+        new_kwargs = self._embed_record_kwargs(record=embed_post, **kwargs)
         result = self._post(text=text, **new_kwargs)
 
         return result
