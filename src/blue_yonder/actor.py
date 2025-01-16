@@ -54,6 +54,9 @@ class Actor:
     # current
     query_kwargs = None
 
+    # query
+    query       = None
+
     # limits
     RateLimit           = None
     RateLimitRemaining  = None
@@ -243,16 +246,6 @@ class Actor:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
         return result
 
-    def post(self, text: str = None, **kwargs):
-        """ Post plain text.
-        :param text: plain text string
-        :return:
-        """
-        kwargs = kwargs | self.query_kwargs
-        result = self._post(text=text, **kwargs)
-
-        return result
-
     def in_reply_to(self, post_url: str = None, parent_post: dict=None, root_post: dict = None, **kwargs):
         """ Reply to a post with plain text.
         :param root_post:
@@ -286,6 +279,30 @@ class Actor:
             }
         }
         return self
+
+    def with_embedded(self, post: str = None, post_with_media: str = None,  image: str = None, images: list = None, external_link: list = None, **kwargs):
+        if post:
+            post = self.read_post(url=post)
+            self._embed_record_kwargs(record=post)
+        if post_with_media:
+            post_with_media = self.read_post(url=post_with_media)
+        if image:
+            # TODO: load image and get blob
+            pass
+        if images:
+            image_blobs = []
+        if external_link:
+            external_link = ''
+        return self
+
+    def post(self, text: str = None, **kwargs):
+        """ Post plain text.
+        :param text: plain text string
+        :return:
+        """
+        kwargs = kwargs | self.query_kwargs
+        result = self._post(text=text, **kwargs)
+        return result
 
     def reply(self, parent_post: dict=None, post_url: str = None, root_post: dict = None, text: str = None, **kwargs):
         """ Reply to a post with plain text.
@@ -342,8 +359,7 @@ class Actor:
         # result = self._post(text=text, reply=reply)
         return kwargs | reply_kwargs
 
-    @staticmethod
-    def _embed_record_kwargs(record: dict, **kwargs):
+    def _embed_record_kwargs(self, record: dict, **kwargs):
         embed_record = {
             'embed': {
                 '$type': 'app.bsky.embed.record',
@@ -353,10 +369,40 @@ class Actor:
                 }
             }
         }
+        self.query_kwargs = self.query_kwargs | embed_record
         return kwargs | embed_record
 
-    @staticmethod
-    def _embed_external_kwargs(url: str, title: str = None, description: str = None, thumb: dict = None, **kwargs):
+    def _embed_record_with_media(self, record: dict, images: list = None, **kwargs):
+        embed_record = {
+            'embed': {
+                '$type': 'app.bsky.embed.recordWithMedia',
+                'media': {
+                    '$type': 'app.bsky.embed.images',
+                    'images': images  #[
+                    #     {
+                    #         'alt': '',
+                    #         'image': {
+                    #             '$type': 'blob',
+                    #             'ref': {'$link': 'bafkreib6elci44xnzolr3dzv2npp2fdvoogytuivc24yl7xfk7pvyeztri'},
+                    #             'mimeType': 'image/jpeg',
+                    #             'size': 633371},
+                    #         'aspectRatio': {'width': 1898, 'height': 1679}}
+                    # ]
+                },
+                'record': record
+                    # {
+                    #     '$type': 'app.bsky.embed.record',
+                    #     'record': {
+                    #         'cid': 'bafyreihauvyzyssrmbhep66st7yytlaqxirgyp6ldlvst7y6v7a4sfun6m',
+                    #         'uri': 'at://did:plc:qygqevukksg7rnewku4ffpkv/app.bsky.feed.post/3lfr2yvpgdk2v'
+                    #     }
+                    # }
+            }
+        }
+        self.query_kwargs = self.query_kwargs | embed_record
+        return kwargs | embed_record
+
+    def _embed_external_kwargs(self, url: str, title: str = None, description: str = None, thumb: dict = None, **kwargs):
         external = {
             'uri': url,
         }
@@ -400,19 +446,6 @@ class Actor:
                                                  thumb=thumb, **kwargs)
         result = self._post(text=text, **new_kwargs)
         return result
-
-    @staticmethod
-    def _embed_quote_kwargs(embed_post: dict, **kwargs):
-        quote = {
-            'embed': {
-                '$type': 'app.bsky.embed.record',
-                'record': {
-                    'uri': embed_post['uri'],
-                    'cid': embed_post['cid']
-                }
-            }
-        }
-        return kwargs | quote
 
     @_check_rate_limit
     def quote_post(self, text: str, quote_url: str = None, embed_post: dict=None, **kwargs):
