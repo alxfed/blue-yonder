@@ -736,7 +736,7 @@ class Actor:
             if url:
                 _, actor, _, rkey = self.uri_from_url(url=url)
             if uri:
-                actor, rkey = split_uri(uri)
+                actor, rkey, _ = split_uri(uri)
         response = self.session.get(
             url=self.pds_url + '/xrpc/com.atproto.repo.getRecord',
             params={
@@ -785,16 +785,26 @@ class Actor:
         return response.json()
 
     def uri_from_url(self, url: str, **kwargs):
-        handle, rkey = split_uri(url)
+        handle, rkey, type = split_uri(url)
         hshe = self._get_profile(at_identifier=handle)
         did = hshe['did']
-        return f'at://{did}/app.bsky.feed.post/{rkey}', did, handle, rkey
+        #
+        # 'at://did:plc:x7lte36djjyhereki5avyst7/app.bsky.graph.list/3ldz5oqihfq2a'
+        if type == 'lists':
+            uri = f'at://{did}/app.bsky.graph.list/{rkey}'
+        else:
+            uri = f'at://{did}/app.bsky.feed.post/{rkey}'
+        return uri, did, handle, rkey
 
     def url_from_uri(self, uri: str, **kwargs):
-        did, rkey = split_uri(uri)
+        did, rkey, type = split_uri(uri)
         hshe = self._get_profile(at_identifier=did)
         handle = hshe['handle']
-        return f'https://bsky.app/profile/{handle}/post/{rkey}', did , handle, rkey
+        if type == 'app.bsky.graph.list':
+            uri = f'https://bsky.app/profile/{handle}/lists/{rkey}'
+        else:
+            uri = f'https://bsky.app/profile/{handle}/post/{rkey}'
+        return uri, did , handle, rkey
 
     def feed_preferences(self, **kwargs):
         """

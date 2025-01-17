@@ -67,8 +67,9 @@ def split_url(url:str, **kwargs):
 def split_uri(uri:str, **kwargs):
     chunks = uri.split("/")
     actor = chunks[-3]
+    type = chunks[-2]
     rkey = chunks[-1]
-    return actor, rkey
+    return actor, rkey, type
 
 
 if __name__ == '__main__':
