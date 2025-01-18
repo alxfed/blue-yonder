@@ -1095,9 +1095,12 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def add_to_list(self, actor: str, list_uri: str, **kwargs):
+    def add_to_list(self, list_url: str = None, actor: str = None, list_uri: str = None, **kwargs):
         """
         """
+        if list_url:
+            list_uri,_,_,_ = self.uri_from_url(list_url)
+
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         list_add_data = {
