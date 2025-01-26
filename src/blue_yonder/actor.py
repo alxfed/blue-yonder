@@ -815,7 +815,7 @@ class Actor:
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """
         if not uri:
-            uri = self.uri_from_url(url=url)
+            uri, _, _, _ = self.uri_from_url(url=url)
         response = self.session.get(
             url=self.pds_url + '/xrpc/app.bsky.feed.getPostThread',
             params={
