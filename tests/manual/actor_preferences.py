@@ -8,7 +8,7 @@ LICENSE file in the root directory of this source tree.
 from blue_yonder import Actor, test_actor
 
 
-my_actor = Actor()
+my_actor = Actor(bluesky_handle='observing-machine.bsky.social')
 
 preferences = my_actor._get_preferences()
 

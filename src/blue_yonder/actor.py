@@ -608,6 +608,66 @@ class Actor:
         return res
 
     @_check_rate_limit
+    def repost(self, uri: str = None, cid: str = None, **kwargs):
+        """
+        """
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        like_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.repost',
+            'record':
+                {
+                    '$type': 'app.bsky.feed.repost',
+                    'createdAt': now,
+                    'subject': {
+                        'uri': uri,
+                        'cid': cid
+                    }
+                }
+        }
+
+        try:
+            response = self.session.post(
+                url=self.post_url,
+                json=like_data)
+
+            response.raise_for_status()
+            res = response.json()
+
+        except Exception as e:
+            raise Exception(f"Error, with talking to Huston:  {e}")
+
+        return res
+
+    @_check_rate_limit
+    def unrepost(self, uri: str = None, record_key: str = None, **kwargs):
+        """
+        """
+        if uri:
+            record_key = uri.split("/")[-1]
+        # Prepare to post
+        elif record_key:
+            pass
+        else:
+            raise Exception('Either uri or record_key must be given.')
+
+        repost_data = {
+            'repo': self.did,  # self.handle,
+            'collection': 'app.bsky.feed.repost',
+            'rkey': record_key
+        }
+        response = self.session.post(
+            url=self.delete_url,
+            json=repost_data
+        )
+        self._update_limits(response)
+
+        response.raise_for_status()
+        res = response.json()
+        return res
+
+    @_check_rate_limit
     def mark_as_seen(self, uri: str = None, feed_context: str = None, **kwargs):
         """
         'app.bsky.feed.defs#blockedPost'
@@ -750,7 +810,7 @@ class Actor:
         return response.json()
 
     @_check_rate_limit
-    def read_thread(self, uri: str, url: str = None, **kwargs):
+    def read_thread(self, url: str = None, uri: str = None, **kwargs):
         """
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """

@@ -9,6 +9,7 @@ from blue_yonder import Another
 from blue_yonder.utilities import read_long_list
 
 
-another = Another(bluesky_handle='alxfed.bsky.social')
+another = Another(bluesky_handle='observing-machine.bsky.social')
 description = another._describe()
+all_posts = another.authored()
 ...

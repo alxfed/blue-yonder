@@ -8,7 +8,7 @@ LICENSE file in the root directory of this source tree.
 from blue_yonder import Actor, yonder
 
 
-# actors = yonder.search_actors(query={'q': 'ML/AI', 'limit': 50}, max_results=1000)
+actors = yonder.search_actors(query={'q': 'AI Dialogue Facilitator', 'limit': 50}, max_results=1000)
 my_actor = Actor(bluesky_handle='alxfed.bsky.social')
 # 'https://bsky.app/profile/alxfed.bsky.social/lists/3ldz5oqihfq2a'
 uri, did, handle, rkey = my_actor.uri_from_url(url='https://bsky.app/profile/alxfed.bsky.social/lists/3ldz5oqihfq2a')
