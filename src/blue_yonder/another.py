@@ -6,7 +6,7 @@ This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
 from datetime import datetime
-from blue_yonder.utilities import read_long_list
+from blue_yonder.utilities import read_long_list, split_uri, split_url
 import requests
 
 
@@ -71,13 +71,12 @@ class Another():
         else:
             ...
 
-    def _get_profile(self, actor: str = None, **kwargs):
+    def _get_profile(self, at_identifier: str = None, **kwargs):
         """
         """
-        actor = self.did if self.did else self.handle
         response = requests.get(
             url=self.VIEW_API + '/xrpc/app.bsky.actor.getProfile',
-            params = {'actor': actor}
+            params = {'actor': at_identifier if at_identifier else self.handle}
         )
         response.raise_for_status()
         return response.json()
@@ -236,10 +235,13 @@ class Another():
         )
         return posts
 
-    def read_thread(self, uri: str, **kwargs):
+    def read_thread(self, url: str = None, uri: str = None, **kwargs):
         """
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
         """
+        if not uri:
+            uri, _, _, _ = self.uri_from_url(url=url)
+
         response = requests.get(
             url=self.VIEW_API + '/xrpc/app.bsky.feed.getPostThread',
             params={
@@ -256,24 +258,32 @@ class Another():
         return thread
 
     def uri_from_url(self, url: str, **kwargs):
-        chunks = url.split("/")
-        rkey = chunks[-1]
-        handle = chunks[-3]
-        hshe = Another(bluesky_handle=handle)
-        # uri = "at://did:plc:abc123..../app.bsky.feed.post/xyz..."
-        return f'at://{hshe.did}/app.bsky.feed.post/{rkey}'
+        handle, rkey, type = split_uri(url)
+        hshe = self._get_profile(at_identifier=handle)
+        did = hshe['did']
+        if type == 'lists':
+            uri = f'at://{did}/app.bsky.graph.list/{rkey}'
+        else:
+            uri = f'at://{did}/app.bsky.feed.post/{rkey}'
+        return uri, did, handle, rkey
 
     def url_from_uri(self, uri: str, **kwargs):
-        chunks = uri.split("/")
-        rkey = chunks[-1]
-        did = chunks[-3]
-        hshe = Another(actor=did)
-        return f'https://bsky.app/profile/{hshe.handle}/post/{rkey}'
+        did, rkey, type = split_uri(uri)
+        hshe = self._get_profile(at_identifier=did)
+        handle = hshe['handle']
+        if type == 'app.bsky.graph.list':
+            uri = f'https://bsky.app/profile/{handle}/lists/{rkey}'
+        else:
+            uri = f'https://bsky.app/profile/{handle}/post/{rkey}'
+        return uri, did, handle, rkey
 
 
 if __name__ == '__main__':
     """ Quick tests
     """
     another = Another(bluesky_handle='alxfed.bsky.social')
+    #
+    root_post_url = 'https://bsky.app/profile/off-we-go.bsky.social/post/3lh3iyof6as2f'
+    thread = another.read_thread(url=root_post_url)
 
     ...
