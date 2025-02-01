@@ -235,6 +235,26 @@ class Another():
         )
         return posts
 
+    def read_post(self, url: str = None, uri: str = None, actor: str = None, rkey: str = None, ** kwargs):
+        """ Read a post with given uri in a given repo.
+            Defaults to own repo.
+        """
+        if not rkey:
+            if url:
+                _, actor, _, rkey = self.uri_from_url(url=url)
+            if uri:
+                actor, rkey, _ = split_uri(uri)
+        response = requests.get(
+            url=self.VIEW_API + '/xrpc/com.atproto.repo.getRecord',
+            params={
+                'repo': actor if actor else self.did,  # self if not given.
+                'collection': 'app.bsky.feed.post',
+                'rkey': rkey
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
     def read_thread(self, url: str = None, uri: str = None, **kwargs):
         """
         Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
@@ -284,6 +304,7 @@ if __name__ == '__main__':
     another = Another(bluesky_handle='alxfed.bsky.social')
     #
     root_post_url = 'https://bsky.app/profile/off-we-go.bsky.social/post/3lh3iyof6as2f'
+    post = another.read_post(url=root_post_url)
     thread = another.read_thread(url=root_post_url)
 
     ...
