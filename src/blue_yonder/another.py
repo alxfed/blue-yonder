@@ -5,6 +5,7 @@
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
+from time import sleep
 from datetime import datetime
 from blue_yonder.utilities import read_long_list, split_uri, split_url
 import requests
@@ -235,47 +236,62 @@ class Another():
         )
         return posts
 
-    def read_post(self, url: str = None, uri: str = None, actor: str = None, rkey: str = None, ** kwargs):
+    def read_post(self, url: str = None, uri: str = None,
+                  actor: str = None, rkey: str = None,
+                  max_attempts: int = 3, ** kwargs):
         """ Read a post with given uri in a given repo.
             Defaults to own repo.
         """
-        if not rkey:
+        if not (rkey and actor):
             if url:
                 _, actor, _, rkey = self.uri_from_url(url=url)
             if uri:
                 actor, rkey, _ = split_uri(uri)
-        response = requests.get(
-            url=self.VIEW_API + '/xrpc/com.atproto.repo.getRecord',
-            params={
-                'repo': actor if actor else self.did,  # self if not given.
-                'collection': 'app.bsky.feed.post',
-                'rkey': rkey
-            }
-        )
-        response.raise_for_status()
-        return response.json()
 
-    def read_thread(self, url: str = None, uri: str = None, **kwargs):
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(
+                    url=self.VIEW_API + '/xrpc/com.atproto.repo.getRecord',
+                    params={
+                        'repo': actor if actor else self.did,  # self if not given.
+                        'collection': 'app.bsky.feed.post',
+                        'rkey': rkey
+                    }
+                )
+                if response.ok:
+                    return response.json()
+            except Exception as e:
+                # print(e)
+                sleep(2)
+        raise Exception(f"Failed reading postafter {max_attempts} attempts")
+
+    def read_thread(self, url: str = None, uri: str = None,
+                    max_attempts: int = 3, **kwargs):
         """
-        Read the whole thread of a post with given uri in a given repo. Defaults to own repo.
+        Read the whole thread of a post with given its url or uri.
         """
         if not uri:
             uri, _, _, _ = self.uri_from_url(url=url)
 
-        response = requests.get(
-            url=self.VIEW_API + '/xrpc/app.bsky.feed.getPostThread',
-            params={
-                'uri': uri,
-                'depth': kwargs.get('depth', 10),  # kwv or 10
-                'parentHeight': kwargs.get('parent_height', 100),  # kwv or 100
-            }
-        )
-        response.raise_for_status()
-        result = response.json()
-        thread = result.get('thread','')
-        # threadgate = result.get('threadgate', None)
-
-        return thread
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(
+                    url=self.VIEW_API + '/xrpc/app.bsky.feed.getPostThread',
+                    params={
+                        'uri': uri,
+                        'depth': kwargs.get('depth', 10),  # kwv or 10
+                        'parentHeight': kwargs.get('parent_height', 100),  # kwv or 100
+                    }
+                )
+                if response.ok:
+                    result = response.json()
+                    thread = result.get('thread', '')
+                    # threadgate = result.get('threadgate', None)
+                    return thread
+            except Exception as e:
+                # print(e)
+                sleep(2)
+        raise Exception(f"Failed reading thread after {max_attempts} attempts")
 
     def uri_from_url(self, url: str, **kwargs):
         handle, rkey, type = split_uri(url)
@@ -301,7 +317,7 @@ class Another():
 if __name__ == '__main__':
     """ Quick tests
     """
-    another = Another(bluesky_handle='alxfed.bsky.social')
+    another = Another() #bluesky_handle='alxfed.bsky.social')
     #
     root_post_url = 'https://bsky.app/profile/off-we-go.bsky.social/post/3lh3iyof6as2f'
     post = another.read_post(url=root_post_url)
