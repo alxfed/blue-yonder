@@ -286,8 +286,8 @@ class Another():
                 )
                 if response.ok:
                     result = response.json()
-                    thread = result.get('thread', '')
-                    thread = rename_key(thread, '$type', 'type')
+                    # thread = result.get('thread', '')
+                    thread = rename_key(result, '$type', 'type')
                     # threadgate = result.get('threadgate', None)
                     return thread
             except Exception as e:

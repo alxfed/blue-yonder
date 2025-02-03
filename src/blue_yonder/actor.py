@@ -808,7 +808,7 @@ class Actor:
         self._update_limits(response)
         response.raise_for_status()
         result = rename_key(response.json(), '$type', 'type')
-        return response.json()
+        return result
 
     @_check_rate_limit
     def read_thread(self, url: str = None, uri: str = None, **kwargs):
@@ -829,10 +829,10 @@ class Actor:
         response.raise_for_status()
 
         result = response.json()
-        thread = result.get('thread', '')
-        res = rename_key(thread, '$type', 'type')
+        # thread = result.get('thread', '')
+        thread = rename_key(result, '$type', 'type')
         #   threadgate = result.get('threadgate', None)  # typically not there.
-        return res
+        return thread
 
     def _get_profile(self, at_identifier: str = None, **kwargs):
         """
@@ -1622,6 +1622,9 @@ class Actor:
 if __name__ == "__main__":
     """ Quick tests were here.
     """
-    pass
+    another = Actor()
+    root_post_url = 'https://bsky.app/profile/off-we-go.bsky.social/post/3lh3iyof6as2f'
+    post = another.read_post(url=root_post_url)
+    thread = another.read_thread(url=root_post_url)
     ...
 
