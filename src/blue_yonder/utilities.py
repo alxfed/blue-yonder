@@ -72,5 +72,23 @@ def split_uri(uri:str, **kwargs):
     return actor, rkey, type
 
 
+def rename_key(nested_dict, old_key, new_key):
+    """
+    Recursively rename '$type' keys to 'type' in a nested dictionary.
+    """
+    if isinstance(nested_dict, dict):
+        new_dict = {}
+        for key, value in nested_dict.items():
+            if key == old_key:
+                new_dict[new_key] = rename_key(value, old_key, new_key)
+            else:
+                new_dict[key] = rename_key(value, old_key, new_key)
+        return new_dict
+    elif isinstance(nested_dict, list):
+        return [rename_key(item, old_key, new_key) for item in nested_dict]
+    else:
+        return nested_dict
+
+
 if __name__ == '__main__':
     pass

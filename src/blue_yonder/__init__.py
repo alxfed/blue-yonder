@@ -15,7 +15,8 @@ from .yonder import (search_actors,
 from .utilities import (read_long_list,
                         _read_rate_limits,
                         split_url,
-                        split_uri)
+                        split_uri,
+                        rename_key)
 
 Butterfly   = Actor     # playful
 Flower      = Another   # aliases
@@ -33,4 +34,5 @@ __all__ = [
     'split_url',
     'split_uri',
     'test_actor',
+    'rename_key'
 ]

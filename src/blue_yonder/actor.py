@@ -10,7 +10,7 @@ from time import sleep, time
 from os import environ
 import requests
 from functools import wraps
-from blue_yonder.utilities import split_uri, split_url
+from blue_yonder.utilities import split_uri, split_url, rename_key
 
 
 handle      = environ.get('BLUESKY_HANDLE')     # the handle of a poster, linker, liker
@@ -807,6 +807,7 @@ class Actor:
         )
         self._update_limits(response)
         response.raise_for_status()
+        result = rename_key(response.json(), '$type', 'type')
         return response.json()
 
     @_check_rate_limit
@@ -829,9 +830,9 @@ class Actor:
 
         result = response.json()
         thread = result.get('thread', '')
+        res = rename_key(thread, '$type', 'type')
         #   threadgate = result.get('threadgate', None)  # typically not there.
-
-        return thread
+        return res
 
     def _get_profile(self, at_identifier: str = None, **kwargs):
         """

@@ -7,7 +7,7 @@ LICENSE file in the root directory of this source tree.
 """
 from time import sleep
 from datetime import datetime
-from blue_yonder.utilities import read_long_list, split_uri, split_url
+from blue_yonder.utilities import read_long_list, split_uri, split_url, rename_key
 import requests
 
 
@@ -259,7 +259,8 @@ class Another():
                     }
                 )
                 if response.ok:
-                    return response.json()
+                    result = rename_key(response.json(), '$type', 'type')
+                    return result
             except Exception as e:
                 # print(e)
                 sleep(2)
@@ -286,6 +287,7 @@ class Another():
                 if response.ok:
                     result = response.json()
                     thread = result.get('thread', '')
+                    thread = rename_key(thread, '$type', 'type')
                     # threadgate = result.get('threadgate', None)
                     return thread
             except Exception as e:
