@@ -52,7 +52,7 @@ class Actor:
     last_blob   = None
 
     # current
-    query_kwargs = None
+    query_kwargs = {}
 
     # query
     query       = None
@@ -300,7 +300,7 @@ class Actor:
         :param text: plain text string
         :return:
         """
-        kwargs = kwargs | self.query_kwargs
+        kwargs = kwargs  # | self.query_kwargs
         result = self._post(text=text, **kwargs)
         return result
 
