@@ -1,6 +1,6 @@
 # Blue Yonder
 &nbsp;&nbsp;&nbsp;&nbsp;This is a Bluesky Python API for humans. It can be used for the simple automations that you _know_ should be implemented, but they are just 'not there' in a pretty annoying way. But you know how to program in Python... And you have an IDE like PyCharm(R), VSCode or even Cursor or Windsurf...
-<br>&nbsp;&nbsp;&nbsp;&nbsp;Here comes the `blue-yonder` Python package. It has been built with a perspective of a person who does not need (or want any of) the professional jargon of software engineers and 'coders'. The logged in entity that performs **actions** is called **Actor**; the **other** entity whose profile is brought into focus is called **Another**; the other useful functionality of the network is in the **yonder** module. It's that simple.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;Here comes the `blue-yonder` Python package. It has been built with a perspective of a person who does not need (or want any of) the professional jargon of software engineers and 'coders'. The logged in entity that performs **actions** is called **Actor**; the **other** entity whose profile or post is brought into focus is called **Another**; the other useful functionality of the network is in the **yonder** module. It's that simple.
 
 ## Installation
 ```Bash

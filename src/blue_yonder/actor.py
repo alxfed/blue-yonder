@@ -246,7 +246,7 @@ class Actor:
             raise Exception(f"Error, with talking to Bluesky API:  {e}")
         return result
 
-    def in_reply_to(self, post_url: str = None, parent_post: dict=None, root_post: dict = None, **kwargs):
+    def in_reply_to(self, post_url: str = None, post_uri: str = None, parent_post: dict=None, root_post: dict = None, **kwargs):
         """ Reply to a post with plain text.
         :param root_post:
         :param parent_post:
@@ -256,6 +256,8 @@ class Actor:
         if not root_post:
             if post_url:
                 post = self.read_post(url=post_url)
+            elif post_uri:
+                post = self.read_post(uri=post_uri)
             elif parent_post:
                 post = self.read_post(uri=parent_post['uri'])
             else:
