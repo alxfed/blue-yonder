@@ -300,7 +300,7 @@ class Actor:
         :param text: plain text string
         :return:
         """
-        kwargs = kwargs  # | self.query_kwargs
+        kwargs = kwargs  | self.query_kwargs
         result = self._post(text=text, **kwargs)
         return result
 
