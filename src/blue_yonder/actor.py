@@ -282,7 +282,7 @@ class Actor:
         }
         return self
 
-    def with_embedded(self, post: str = None, post_with_media: str = None,  image: str = None, images: list = None, external_link: list = None, **kwargs):
+    def _with_embedded(self, post: str = None, post_with_media: str = None,  image: str = None, images: list = None, external_link: list = None, **kwargs):
         if post:
             post = self.read_post(url=post)
             self._embed_record_kwargs(record=post)
@@ -359,6 +359,7 @@ class Actor:
             }
         }
         # result = self._post(text=text, reply=reply)
+        self.query_kwargs = self.query_kwargs | reply_kwargs
         return kwargs | reply_kwargs
 
     def _embed_record_kwargs(self, record: dict, **kwargs):
@@ -449,8 +450,7 @@ class Actor:
         result = self._post(text=text, **new_kwargs)
         return result
 
-    @_check_rate_limit
-    def quote_post(self, text: str, quote_url: str = None, embed_post: dict=None, **kwargs):
+    def with_quoted_post(self, post: str = None, embed_post: dict=None, **kwargs):
         """ Embed a given post into a new post.
         quote_url: url of a Bluesky post to quote (optional)
                         - or -
@@ -459,16 +459,13 @@ class Actor:
         output: {'uri': uri, 'cid': cid, ...} of a post with embedded post.
         """
         if not embed_post:
-            if quote_url:
-                post = self.read_post(url=quote_url)
+            if post:
+                embed_post = self.read_post(url=post)
             else:
-                raise RuntimeError('No url,root or post to embedgiven.')
-            embed_post = post
+                raise RuntimeError('No url or post to embed given.')
 
         new_kwargs = self._embed_record_kwargs(record=embed_post, **kwargs)
-        result = self._post(text=text, **new_kwargs)
-
-        return result
+        return self
 
     @_check_rate_limit
     def upload_image(self, file_path, **kwargs):
