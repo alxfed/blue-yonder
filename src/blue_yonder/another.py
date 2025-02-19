@@ -313,10 +313,12 @@ class Another():
             response.raise_for_status()
             return response.json()
 
-        list_feed = read_long_list(
+        ingested_feed = read_long_list(
             fetcher=fetch_feed_posts,
             max_results=max_results,
             parameter='feed')
+
+        list_feed = rename_key(ingested_feed, '$type', 'type')
 
         return list_feed
 
