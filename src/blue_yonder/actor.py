@@ -1228,7 +1228,7 @@ class Actor:
                 url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
                 params={
                     'list': list_uri,
-                    'limit': 100,
+                    'limit': 100 if max_results > 100 else max_results,
                     'cursor': cursor}
             )
             self._update_limits(response)

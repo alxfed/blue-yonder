@@ -121,10 +121,6 @@ class Another():
 
     def read_list(self, uri: str = None, max_results: int = 1000, **kwargs):
         """
-
-        :param uri:
-        :param kwargs:
-        :return:
         """
         def fetch_members(cursor: str = None, **kwargs):
             response = requests.get(
@@ -294,6 +290,35 @@ class Another():
                 # print(e)
                 sleep(2)
         raise Exception(f"Failed reading thread after {max_attempts} attempts")
+
+    def list_feed(self, url: str = None, uri: str = None, max_results: int = 100, **kwargs):
+        """
+        """
+        if url:
+            list_uri,_,_,_ = self.uri_from_url(url)
+        elif uri:
+            list_uri = uri
+        else:
+            raise Exception('Either url or uri must be given.')
+
+        def fetch_feed_posts(cursor: str = None, **kwargs):
+            response = requests.get(
+                url=self.VIEW_API + '/xrpc/app.bsky.feed.getListFeed',
+                params={
+                    'list': list_uri,
+                    'limit': 100 if max_results > 100 else max_results,
+                    'cursor': cursor}
+            )
+
+            response.raise_for_status()
+            return response.json()
+
+        list_feed = read_long_list(
+            fetcher=fetch_feed_posts,
+            max_results=max_results,
+            parameter='feed')
+
+        return list_feed
 
     def uri_from_url(self, url: str, **kwargs):
         handle, rkey, type = split_uri(url)
