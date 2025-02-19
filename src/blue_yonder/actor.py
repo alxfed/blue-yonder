@@ -204,9 +204,14 @@ class Actor:
         :return:
         """
         # Pick up what's in the kwargs.
-        text    = kwargs.get('text', text)
-        reply   = kwargs.get('reply', None)
-        embed   = kwargs.get('embed', None)
+        # text    = kwargs.get('text', text)
+        # reply   = kwargs.get('reply', None)
+        # embed   = kwargs.get('embed', None)
+
+        # Wha accumulated in the query_kwargs.
+        text    = self.query_kwargs.get('text', text)
+        reply   = self.query_kwargs.get('reply', None)
+        embed   = self.query_kwargs.get('embed', None)
 
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         # Prepare the record
@@ -414,14 +419,6 @@ class Actor:
         if description:
             external['description'] = description
         if thumb:
-            # 'thumb': {
-            #     '$type': 'blob',
-            #     'ref': {
-            #         '$link': 'bafkreiash5e...'
-            #     },
-            #     'mimeType': 'image/png',
-            #     'size': 23527
-            # }
             external['thumb'] = thumb
         embed_external = {
             'embed': {
@@ -429,6 +426,7 @@ class Actor:
                 'external': external
               }
         }
+        self.query_kwargs = self.query_kwargs | embed_external
         return kwargs | embed_external
 
     def post_external(self, url: str, text: str = None,
@@ -845,6 +843,11 @@ class Actor:
         return response.json()
 
     def uri_from_url(self, url: str, **kwargs):
+        """ Find uri, did, handle and rkey knowing a url
+        :param url:
+        :param kwargs:
+        :return: uri, did, handle, rkey  # tuple
+        """
         handle, rkey, type = split_uri(url)
         hshe = self._get_profile(at_identifier=handle)
         did = hshe['did']
@@ -1210,9 +1213,16 @@ class Actor:
 
         return response.json()
 
-    def list_feed(self, list_uri: str = None, **kwargs):
+    def list_feed(self, url: str = None, uri: str = None, max_results: int = 100, **kwargs):
         """
         """
+        if url:
+            list_uri,_,_,_ = self.uri_from_url(url)
+        elif uri:
+            list_uri = uri
+        else:
+            raise Exception('Either url or uri must be given.')
+
         def fetch_feed_posts(cursor: str = None, **kwargs):
             response = self.session.get(
                 url=self.pds_url + '/xrpc/app.bsky.feed.getListFeed',
@@ -1228,6 +1238,7 @@ class Actor:
 
         list_feed = self._read_long_list(
             fetcher=fetch_feed_posts,
+            max_results=max_results,
             parameter='feed')
 
         return list_feed
