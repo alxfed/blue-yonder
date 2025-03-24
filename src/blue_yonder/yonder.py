@@ -120,6 +120,15 @@ def search_actors(query: dict, max_results: int = 100, **kwargs):
         cursor: string (optional)Optional pagination mechanism; may not necessarily allow scrolling through entire result set.
 
         Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
+
+    Use this method as follows:
+    ..  code-block:: python
+        from blue_yonder import yonder
+
+        actors = yonder.search_actors(
+                query={'q': 'ML/AI', 'limit': 50},
+                max_results=1000
+            )
     """
     def fetch_actors(cursor: str = None, **kwargs):
         response = requests.get(
