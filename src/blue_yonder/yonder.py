@@ -121,7 +121,10 @@ def search_actors(query: dict, max_results: int = 100, **kwargs):
 
         Some recommendations can be found here: https://bsky.social/about/blog/05-31-2024-search
 
+    # https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html#showing-code-examples
+
     Use this method as follows:
+
     ..  code-block:: python
         from blue_yonder import yonder
 
