@@ -125,7 +125,7 @@ def search_actors(query: dict, max_results: int = 100, **kwargs):
 
     Use this method as follows:
 
-    ..  code-block:: python
+    .. code-block:: python
         from blue_yonder import yonder
 
         actors = yonder.search_actors(
